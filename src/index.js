@@ -1,6 +1,5 @@
-require('dotenv').config();
-
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const fs = require('fs');
 const {
   Client,
@@ -22,10 +21,7 @@ if (!process.env.DISCORD_TOKEN) {
 
 // Initialize Discord client
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates,
-  ],
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
 });
 
 client.commands = new Collection();
@@ -37,7 +33,9 @@ const musicService = new MusicService(client);
 
 // Load commands from commands directory
 const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter((file) => file.endsWith('.js'));
+const commandFiles = fs
+  .readdirSync(commandsPath)
+  .filter((file) => file.endsWith('.js'));
 
 const slashCommandsData = [];
 
@@ -48,7 +46,9 @@ for (const file of commandFiles) {
     client.commands.set(command.data.name, command);
     slashCommandsData.push(command.data.toJSON());
   } else {
-    console.warn(`[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`);
+    console.warn(
+      `[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`,
+    );
   }
 }
 
@@ -56,7 +56,7 @@ for (const file of commandFiles) {
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`🤖 Logged in as ${readyClient.user.tag}!`);
 
-  readyClient.user.setActivity('/help & /play | AI Voice & Music', {
+  readyClient.user.setActivity('/help & /play | khair.ink', {
     type: ActivityType.Listening,
   });
 
@@ -69,11 +69,15 @@ client.once(Events.ClientReady, async (readyClient) => {
   try {
     const guildId = process.env.GUILD_ID;
     if (guildId) {
-      console.log(`⚡ Registering slash commands for testing guild ID: ${guildId}...`);
+      console.log(
+        `⚡ Registering slash commands for testing guild ID: ${guildId}...`,
+      );
       await readyClient.application.commands.set(slashCommandsData, guildId);
       console.log('✅ Guild slash commands registered instantly!');
     } else {
-      console.log('🌐 Registering global slash commands (may take a few minutes to cache across all servers)...');
+      console.log(
+        '🌐 Registering global slash commands (may take a few minutes to cache across all servers)...',
+      );
       await readyClient.application.commands.set(slashCommandsData);
       console.log('✅ Global slash commands registered successfully!');
     }
@@ -116,7 +120,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 // Graceful shutdown handling
 const handleShutdown = async (signal) => {
-  console.log(`\n🛑 Received ${signal}. Disconnecting voice clients and shutting down...`);
+  console.log(
+    `\n🛑 Received ${signal}. Disconnecting voice clients and shutting down...`,
+  );
   try {
     for (const [guildId] of voiceManager.guilds) {
       voiceManager.disconnect(guildId);
