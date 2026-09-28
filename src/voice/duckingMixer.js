@@ -5,11 +5,11 @@ const { Transform } = require('stream');
  * and allows mixing an incoming TTS voice stream over it with smooth volume ducking.
  */
 class DuckingMixer extends Transform {
-  constructor(baseVolume = 0.5) {
+  constructor(baseVolume = 0.20, ttsVolume = 0.40) {
     super();
     this.baseVolume = baseVolume;
     this.musicVolume = baseVolume;
-    this.ttsVolume = 0.55;
+    this.ttsVolume = ttsVolume;
     this.ttsBuffer = Buffer.alloc(0);
     this.isSpeaking = false;
     this.ttsInputEnded = false;
@@ -19,10 +19,14 @@ class DuckingMixer extends Transform {
 
   /**
    * Sets the active base music volume.
-   * @param {number} vol - 0.05 to 1.0
+   * @param {number} vol - 0.01 to 1.0
    */
   setBaseVolume(vol) {
-    this.baseVolume = Math.max(0.05, Math.min(1.0, vol));
+    if (this.fadeTimer) {
+      clearInterval(this.fadeTimer);
+      this.fadeTimer = null;
+    }
+    this.baseVolume = Math.max(0.01, Math.min(1.0, vol));
     if (!this.isSpeaking) {
       this.musicVolume = this.baseVolume;
     }

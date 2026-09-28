@@ -93,7 +93,7 @@ class VoiceManager {
       activeMixer: null,
       musicFFmpeg: null,
       currentResource: null,
-      volume: 0.5, // 50% comfortable default volume
+      volume: 0.20, // 20% comfortable default music volume
       isPlaying: false,
       channelId: channel.id,
       channelName: channel.name,
@@ -318,7 +318,7 @@ class VoiceManager {
     try {
       if (currentItem.type === 'song') {
         // Create DuckingMixer to allow real-time background voice ducking with configured volume
-        const mixer = new DuckingMixer(guildState.volume ?? 0.5);
+        const mixer = new DuckingMixer(guildState.volume ?? 0.20, 0.40);
         guildState.activeMixer = mixer;
 
         // Build FFmpeg args using system ffmpeg with -nostdin to prevent blocking
@@ -376,7 +376,7 @@ class VoiceManager {
           inputType: StreamType.Arbitrary,
           inlineVolume: true,
         });
-        resource.volume?.setVolume(guildState.volume ?? 0.5);
+        resource.volume?.setVolume(0.40);
         guildState.currentResource = resource;
         guildState.player.play(resource);
       }
@@ -478,10 +478,10 @@ class VoiceManager {
   }
 
   /**
-   * Sets playback volume for a guild (0.05 to 1.0).
+   * Sets playback volume for a guild (0.01 to 1.0).
    * @param {string} guildId
-   * @param {number} volume - Float between 0.05 and 1.0
-   * @returns {number} The updated volume percentage (5 to 100)
+   * @param {number} volume - Float between 0.01 and 1.0
+   * @returns {number} The updated volume percentage (1 to 100)
    */
   setVolume(guildId, volume) {
     const guildState = this.guilds.get(guildId);
@@ -489,7 +489,7 @@ class VoiceManager {
       throw new Error('Bot is not connected to a voice channel.');
     }
 
-    const clamped = Math.max(0.05, Math.min(1.0, volume));
+    const clamped = Math.max(0.01, Math.min(1.0, volume));
     guildState.volume = clamped;
 
     if (guildState.activeMixer) {
@@ -505,11 +505,11 @@ class VoiceManager {
   /**
    * Gets current volume percentage for a guild.
    * @param {string} guildId
-   * @returns {number} Percentage (5 to 100)
+   * @returns {number} Percentage (1 to 100)
    */
   getVolume(guildId) {
     const guildState = this.guilds.get(guildId);
-    return Math.round((guildState?.volume ?? 0.5) * 100);
+    return Math.round((guildState?.volume ?? 0.20) * 100);
   }
 }
 

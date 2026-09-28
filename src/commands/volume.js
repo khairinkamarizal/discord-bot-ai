@@ -7,8 +7,8 @@ module.exports = {
     .addIntegerOption((option) =>
       option
         .setName('level')
-        .setDescription('Volume level from 5 to 100% (default is 50%)')
-        .setMinValue(5)
+        .setDescription('Volume level from 1 to 100% (default is 20%)')
+        .setMinValue(1)
         .setMaxValue(100)
         .setRequired(false)
     ),
