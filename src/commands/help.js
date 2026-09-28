@@ -45,27 +45,32 @@ module.exports = {
     }
 
     try {
-      // 1. Generate concise, voice-tailored answer from Gemini
-      const { rawText, speechText } = await aiService.askQuestion(question);
+      const userName = interaction.member?.displayName || interaction.user.username;
 
-      // 2. Queue the audio in the voice channel
+      // 1. Generate concise, voice-tailored answer from Gemini addressing the user
+      const { rawText, speechText } = await aiService.askQuestion(question, userName);
+
+      // 2. Play or mix the audio in the voice channel (with ducking if music is active)
       const guildState = voiceManager.getState(interaction.guildId);
       const channelName = guildState?.channelName || 'voice';
 
       await voiceManager.speak(interaction.guildId, speechText, {
         question,
+        userName,
       });
 
       // 3. Display the response embed in text chat
+      const isMusicPlaying = guildState?.currentTrack?.type === 'song';
       const embed = new EmbedBuilder()
         .setColor(0x5865f2)
         .setTitle('🎙️ Voice AI Answer')
         .addFields(
+          { name: '👤 User', value: `<@${interaction.user.id}>`, inline: true },
           { name: '❓ Question', value: question.slice(0, 1024) },
           { name: '💬 Spoken Answer', value: rawText.slice(0, 1024) }
         )
         .setFooter({
-          text: `🔊 Spoken in #${channelName} • Powered by Gemini & Edge Neural TTS`,
+          text: `🔊 Spoken in #${channelName}${isMusicPlaying ? ' (music ducked to 20% background)' : ''} • Powered by Gemini & Edge TTS`,
         })
         .setTimestamp();
 

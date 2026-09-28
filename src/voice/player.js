@@ -3,6 +3,7 @@ if (ffmpegPath && !process.env.FFMPEG_PATH) {
   process.env.FFMPEG_PATH = ffmpegPath;
 }
 
+const prism = require('prism-media');
 const {
   joinVoiceChannel,
   createAudioPlayer,
@@ -13,7 +14,9 @@ const {
   getVoiceConnection,
   StreamType,
 } = require('@discordjs/voice');
+
 const { TTSService } = require('../services/tts');
+const { DuckingMixer } = require('./duckingMixer');
 
 class VoiceManager {
   constructor() {
@@ -22,8 +25,10 @@ class VoiceManager {
      * Map of guildId -> {
      *   connection: VoiceConnection,
      *   player: AudioPlayer,
-     *   queue: Array<QueueItem>,
-     *   currentItem: QueueItem | null,
+     *   queue: Array<object>,
+     *   currentTrack: object | null,
+     *   activeMixer: DuckingMixer | null,
+     *   musicFFmpeg: prism.FFmpeg | null,
      *   isPlaying: boolean,
      *   channelId: string,
      *   channelName: string,
@@ -40,7 +45,7 @@ class VoiceManager {
     const guildId = channel.guild.id;
     let guildState = this.guilds.get(guildId);
 
-    // If already connected to the same channel and ready, reuse
+    // If already in the exact same channel and ready, reuse
     if (
       guildState &&
       guildState.channelId === channel.id &&
@@ -66,7 +71,9 @@ class VoiceManager {
       connection,
       player,
       queue: [],
-      currentItem: null,
+      currentTrack: null,
+      activeMixer: null,
+      musicFFmpeg: null,
       isPlaying: false,
       channelId: channel.id,
       channelName: channel.name,
@@ -74,7 +81,7 @@ class VoiceManager {
 
     this.guilds.set(guildId, guildState);
 
-    // When current track/speech finishes, advance queue
+    // Advance queue on track completion
     player.on(AudioPlayerStatus.Idle, () => {
       this.playNext(guildId);
     });
@@ -84,7 +91,7 @@ class VoiceManager {
       this.playNext(guildId);
     });
 
-    // Reconnection & cleanup listeners
+    // Connection lifecycle listeners
     connection.on(VoiceConnectionStatus.Disconnected, async () => {
       try {
         await Promise.race([
@@ -97,22 +104,24 @@ class VoiceManager {
     });
 
     connection.on(VoiceConnectionStatus.Destroyed, () => {
-      this.guilds.delete(guildId);
+      this.disconnect(guildId);
     });
 
     return guildState;
   }
 
   /**
-   * Disconnects from the voice channel in a guild and cleans up state.
+   * Disconnects from the voice channel in a guild and cleans up all audio streams.
    * @param {string} guildId
    */
   disconnect(guildId) {
     const guildState = this.guilds.get(guildId);
     if (guildState) {
       guildState.queue = [];
-      guildState.currentItem = null;
+      guildState.currentTrack = null;
       guildState.isPlaying = false;
+      this._cleanupStreams(guildState);
+
       try {
         guildState.player.stop(true);
       } catch (e) {}
@@ -135,7 +144,26 @@ class VoiceManager {
   }
 
   /**
-   * Queues or immediately plays a song.
+   * Helper to clean up active FFmpeg and Mixer streams for a guild.
+   * @private
+   */
+  _cleanupStreams(guildState) {
+    if (guildState.musicFFmpeg) {
+      try {
+        guildState.musicFFmpeg.destroy();
+      } catch (e) {}
+      guildState.musicFFmpeg = null;
+    }
+    if (guildState.activeMixer) {
+      try {
+        guildState.activeMixer.destroy();
+      } catch (e) {}
+      guildState.activeMixer = null;
+    }
+  }
+
+  /**
+   * Queues or immediately plays a song with real-time ducking capability.
    * @param {string} guildId
    * @param {object} song - Song metadata including streamUrl
    * @returns {{ isPlayingNow: boolean, position: number }}
@@ -162,8 +190,10 @@ class VoiceManager {
   }
 
   /**
-   * Speaks text aloud in the voice channel (AI response).
-   * Prioritizes AI speech so users don't have to wait for an entire song to finish.
+   * Speaks AI answer in voice.
+   * IF a song is playing: Smoothly ducks song volume to 20%, speaks over the background music,
+   * then restores song volume back to 100% when finished!
+   * IF no song is playing: Plays voice directly.
    * @param {string} guildId
    * @param {string} speechText
    * @param {object} meta
@@ -174,16 +204,63 @@ class VoiceManager {
       throw new Error('Bot is not connected to a voice channel.');
     }
 
+    // CASE 1: Song is currently playing with active mixer -> Duck & overlay!
+    if (guildState.isPlaying && guildState.activeMixer) {
+      const mixer = guildState.activeMixer;
+
+      // 1. Slowly lower music volume to 20%
+      mixer.startSpeech();
+
+      try {
+        // 2. Generate TTS audio stream
+        const ttsStream = await this.ttsService.getAudioStream(speechText);
+
+        // 3. Transcode TTS stream to 48kHz 16-bit stereo PCM
+        const ttsFFmpeg = new prism.FFmpeg({
+          args: [
+            '-analyzeduration', '0',
+            '-loglevel', '0',
+            '-f', 's16le',
+            '-ar', '48000',
+            '-ac', '2',
+          ],
+        });
+
+        ttsStream.pipe(ttsFFmpeg);
+
+        ttsFFmpeg.on('data', (chunk) => {
+          mixer.addTTSChunk(chunk);
+        });
+
+        const finishSpeech = () => {
+          // Allow audio queue to drain then smoothly raise music back to 100%
+          setTimeout(() => {
+            mixer.endSpeech();
+          }, 400);
+        };
+
+        ttsFFmpeg.once('end', finishSpeech);
+        ttsFFmpeg.once('error', (err) => {
+          console.error('TTS FFmpeg error during ducking:', err);
+          finishSpeech();
+        });
+      } catch (err) {
+        console.error('Failed to overlay TTS speech over music:', err);
+        mixer.endSpeech();
+      }
+      return;
+    }
+
+    // CASE 2: No song is playing -> Play standalone voice response
     const item = {
       type: 'tts',
       text: speechText,
       ...meta,
     };
 
-    // If currently playing a song, insert the AI speech right at the front and switch
     if (guildState.isPlaying) {
       guildState.queue.unshift(item);
-      guildState.player.stop(true); // Triggers Idle -> plays the AI response immediately
+      guildState.player.stop(true);
     } else {
       guildState.queue.push(item);
       await this.playNext(guildId);
@@ -191,56 +268,75 @@ class VoiceManager {
   }
 
   /**
-   * Plays the next item in the audio queue.
+   * Advances and plays the next item in the audio queue.
    * @param {string} guildId
    */
   async playNext(guildId) {
     const guildState = this.guilds.get(guildId);
     if (!guildState) return;
 
+    this._cleanupStreams(guildState);
+
     if (guildState.queue.length === 0) {
       guildState.isPlaying = false;
-      guildState.currentItem = null;
+      guildState.currentTrack = null;
       return;
     }
 
     const currentItem = guildState.queue.shift();
-    guildState.currentItem = currentItem;
+    guildState.currentTrack = currentItem;
     guildState.isPlaying = true;
 
     try {
-      let resource;
-
       if (currentItem.type === 'song') {
-        resource = createAudioResource(currentItem.streamUrl, {
-          inputType: StreamType.Arbitrary,
+        // Create DuckingMixer to allow real-time background voice ducking
+        const mixer = new DuckingMixer();
+        guildState.activeMixer = mixer;
+
+        // FFmpeg stream input -> 48kHz 16-bit stereo PCM
+        const musicFFmpeg = new prism.FFmpeg({
+          args: [
+            '-analyzeduration', '0',
+            '-loglevel', '0',
+            '-i', currentItem.streamUrl,
+            '-f', 's16le',
+            '-ar', '48000',
+            '-ac', '2',
+          ],
         });
+        guildState.musicFFmpeg = musicFFmpeg;
+
+        musicFFmpeg.pipe(mixer);
+
+        musicFFmpeg.on('error', (err) => {
+          console.error('Music stream FFmpeg error:', err);
+          this.playNext(guildId);
+        });
+
+        // Feed mixed raw PCM into AudioPlayer
+        const resource = createAudioResource(mixer, {
+          inputType: StreamType.Raw,
+        });
+
+        guildState.player.play(resource);
       } else {
-        // TTS speech
+        // Standalone TTS speech
         const stream = await this.ttsService.getAudioStream(currentItem.text);
-        resource = createAudioResource(stream, {
+        const resource = createAudioResource(stream, {
           inputType: StreamType.Arbitrary,
         });
-      }
-
-      guildState.player.play(resource);
-
-      if (currentItem.onStart) {
-        currentItem.onStart();
+        guildState.player.play(resource);
       }
     } catch (err) {
       console.error(`Failed to play audio in guild ${guildId}:`, err);
-      if (currentItem.onError) {
-        currentItem.onError(err);
-      }
       this.playNext(guildId);
     }
   }
 
   /**
-   * Skips the currently playing item to the next in queue.
+   * Skips currently playing song/speech to the next in queue.
    * @param {string} guildId
-   * @returns {object | null} Skipped item
+   * @returns {object | null}
    */
   skip(guildId) {
     const guildState = this.guilds.get(guildId);
@@ -248,13 +344,14 @@ class VoiceManager {
       return null;
     }
 
-    const skippedItem = guildState.currentItem;
+    const skipped = guildState.currentTrack;
+    this._cleanupStreams(guildState);
     guildState.player.stop(true);
-    return skippedItem;
+    return skipped;
   }
 
   /**
-   * Pauses the audio player.
+   * Pauses playback.
    * @param {string} guildId
    */
   pause(guildId) {
@@ -266,7 +363,7 @@ class VoiceManager {
   }
 
   /**
-   * Resumes the audio player.
+   * Resumes paused playback.
    * @param {string} guildId
    */
   resume(guildId) {
@@ -278,15 +375,16 @@ class VoiceManager {
   }
 
   /**
-   * Stops playback and clears the entire queue.
+   * Halts playback and empties queue.
    * @param {string} guildId
    */
   stop(guildId) {
     const guildState = this.guilds.get(guildId);
     if (guildState) {
       guildState.queue = [];
-      guildState.currentItem = null;
+      guildState.currentTrack = null;
       guildState.isPlaying = false;
+      this._cleanupStreams(guildState);
       guildState.player.stop(true);
       return true;
     }
@@ -294,7 +392,7 @@ class VoiceManager {
   }
 
   /**
-   * Returns current queue information.
+   * Retrieves current queue status.
    * @param {string} guildId
    */
   getQueue(guildId) {
@@ -302,7 +400,7 @@ class VoiceManager {
     if (!guildState) return null;
 
     return {
-      currentItem: guildState.currentItem,
+      currentItem: guildState.currentTrack,
       queue: [...guildState.queue],
       isPlaying: guildState.isPlaying,
       isPaused: guildState.player.state.status === AudioPlayerStatus.Paused,

@@ -47,20 +47,24 @@ class AIService {
   /**
    * Generates a voice-optimized response to a user question using Gemini.
    * @param {string} question - The user's question
+   * @param {string} userName - The name of the user asking the question
    * @returns {Promise<{ rawText: string, speechText: string }>}
    */
-  async askQuestion(question) {
+  async askQuestion(question, userName = 'there') {
     if (!process.env.GEMINI_API_KEY) {
       throw new Error('Gemini API key is not configured. Please add GEMINI_API_KEY to your .env file.');
     }
 
-    const systemInstruction = `You are a voice assistant in a Discord voice channel.
+    const cleanUserName = userName.replace(/[@#*`_~]/g, '').trim() || 'there';
+
+    const systemInstruction = `You are a friendly voice assistant in a Discord voice channel.
 Guidelines:
-1. Answer the question directly, accurately, and conversationally.
-2. Keep your answer brief: maximum 2 to 3 sentences.
-3. NEVER use markdown formatting like asterisks, bullet points, headers, or code blocks.
-4. NEVER use emojis.
-5. Your response will be read out loud word-for-word by a text-to-speech engine.`;
+1. Start your answer by naturally addressing the user: "Okay ${cleanUserName}, for your question..." or "Okay ${cleanUserName}, regarding your question...".
+2. Answer the question directly, accurately, and conversationally.
+3. Keep your answer brief: 2 to 3 sentences maximum so it sounds natural when spoken over audio.
+4. NEVER use markdown formatting like asterisks, bullet points, headers, or code blocks.
+5. NEVER use emojis.
+6. Your response will be read out loud word-for-word by a text-to-speech engine.`;
 
     try {
       const response = await this.ai.models.generateContent({

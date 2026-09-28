@@ -17,6 +17,7 @@ Whenever someone uses `/help <question>`, the bot answers out loud in the voice 
     *   **AI**: Google Gemini (generous free tier on Google AI Studio).
     *   **TTS**: Microsoft Edge Neural TTS (completely free, zero API key required, high-fidelity neural voices).
     *   **Music**: Fast audio extraction powered by SoundCloud and streaming extractors (no YouTube datacenter IP blocking issues on VPS!).
+*   **🎧 DJ Mode & Audio Ducking**: If a song is playing when someone uses `/help`, the bot smoothly fades the song down to **20% volume** as background music, addresses the user by name (*"Okay @username, for your question..."*), and speaks the answer over the track. Once the answer finishes, the music volume seamlessly glides back up to 100%!
 *   **Smart Audio Queueing**: Seamlessly handles multiple songs and AI speech responses.
 
 ---
