@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -28,13 +28,26 @@ module.exports = {
 
     await interaction.deferReply();
 
+    // Check channel permissions
+    const permissions = userChannel.permissionsFor(interaction.client.user);
+    if (permissions && !permissions.has(PermissionFlagsBits.Connect)) {
+      return interaction.editReply({
+        content: '❌ I do not have permission to **Connect** to this voice channel! Please check channel permissions.',
+      });
+    }
+    if (permissions && !permissions.has(PermissionFlagsBits.Speak)) {
+      return interaction.editReply({
+        content: '❌ I do not have permission to **Speak** in this voice channel! Please check channel permissions.',
+      });
+    }
+
     // Ensure bot is in voice channel
     try {
       await voiceManager.join(userChannel);
     } catch (err) {
       console.error('Failed to join voice channel for /play:', err);
       return interaction.editReply({
-        content: '❌ Could not connect to your voice channel. Please check bot permissions.',
+        content: `❌ Could not connect to your voice channel: ${err.message || 'Connection timed out'}. Please check bot permissions.`,
       });
     }
 

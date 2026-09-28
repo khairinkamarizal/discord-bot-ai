@@ -62,7 +62,16 @@ class VoiceManager {
       selfMute: false,
     });
 
-    await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
+    connection.on('stateChange', (oldState, newState) => {
+      console.log(`🔊 Voice [${channel.guild.name} #${channel.name}]: ${oldState.status} ➔ ${newState.status}`);
+    });
+
+    try {
+      await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
+    } catch (err) {
+      console.error(`🔊 Failed to reach Ready state for #${channel.name}. Current state: ${connection.state.status}`);
+      throw err;
+    }
 
     const player = createAudioPlayer();
     connection.subscribe(player);

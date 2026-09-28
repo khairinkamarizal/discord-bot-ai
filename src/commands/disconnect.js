@@ -7,19 +7,20 @@ module.exports = {
 
   /**
    * @param {import('discord.js').ChatInputCommandInteraction} interaction
-   * @param {import('../voice/player').VoiceManager} voiceManager
+   * @param {{ voiceManager: import('../voice/player').VoiceManager }} services
    */
   async execute(interaction, { voiceManager }) {
+    await interaction.deferReply();
+
     const disconnected = voiceManager.disconnect(interaction.guildId);
 
     if (!disconnected) {
-      return interaction.reply({
+      return interaction.editReply({
         content: '❌ I am not currently connected to any voice channel in this server.',
-        ephemeral: true,
       });
     }
 
-    return interaction.reply({
+    return interaction.editReply({
       content: '👋 Disconnected from the voice channel. See you next time!',
     });
   },
