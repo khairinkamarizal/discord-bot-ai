@@ -1,0 +1,90 @@
+const { GoogleGenAI } = require('@google/genai');
+
+/**
+ * Strips markdown and special characters so TTS can read the text naturally.
+ */
+function cleanTextForSpeech(text) {
+  if (!text) return '';
+  return text
+    // Remove code blocks
+    .replace(/```[\s\S]*?```/g, '')
+    // Remove inline code
+    .replace(/`([^`]+)`/g, '$1')
+    // Remove markdown headers
+    .replace(/^#{1,6}\s+/gm, '')
+    // Remove bold/italic markdown
+    .replace(/(\*\*|\*|__|_)(.*?)\1/g, '$2')
+    // Remove strikethrough
+    .replace(/~~(.*?)~~/g, '$1')
+    // Remove blockquotes
+    .replace(/^>\s+/gm, '')
+    // Remove bullet points / lists
+    .replace(/^[\*\-\+]\s+/gm, '')
+    .replace(/^\d+\.\s+/gm, '')
+    // Remove markdown links [text](url) -> text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Remove raw URLs
+    .replace(/https?:\/\/\S+/gi, '')
+    // Remove Discord custom emojis (<:name:123456789>)
+    .replace(/<a?:[a-zA-Z0-9_]+:[0-9]+>/g, '')
+    // Remove standard unicode emojis
+    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/gu, '')
+    // Normalize whitespace
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+class AIService {
+  constructor() {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.warn('⚠️ WARNING: GEMINI_API_KEY is not set in environment variables.');
+    }
+    this.ai = new GoogleGenAI({ apiKey: apiKey || '' });
+    this.modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  }
+
+  /**
+   * Generates a voice-optimized response to a user question using Gemini.
+   * @param {string} question - The user's question
+   * @returns {Promise<{ rawText: string, speechText: string }>}
+   */
+  async askQuestion(question) {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('Gemini API key is not configured. Please add GEMINI_API_KEY to your .env file.');
+    }
+
+    const systemInstruction = `You are a voice assistant in a Discord voice channel.
+Guidelines:
+1. Answer the question directly, accurately, and conversationally.
+2. Keep your answer brief: maximum 2 to 3 sentences.
+3. NEVER use markdown formatting like asterisks, bullet points, headers, or code blocks.
+4. NEVER use emojis.
+5. Your response will be read out loud word-for-word by a text-to-speech engine.`;
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model: this.modelName,
+        contents: question,
+        config: {
+          systemInstruction,
+          temperature: 0.7,
+          maxOutputTokens: 200,
+        },
+      });
+
+      const rawText = response.text?.trim() || 'Sorry, I could not generate an answer.';
+      const speechText = cleanTextForSpeech(rawText);
+
+      return { rawText, speechText };
+    } catch (error) {
+      console.error('Gemini API Error:', error);
+      throw error;
+    }
+  }
+}
+
+module.exports = {
+  AIService,
+  cleanTextForSpeech,
+};

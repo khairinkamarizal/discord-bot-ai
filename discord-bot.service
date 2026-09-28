@@ -1,0 +1,15 @@
+[Unit]
+Description=Discord AI Voice Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/discord-bot
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+EnvironmentFile=/opt/discord-bot/.env
+
+[Install]
+WantedBy=multi-user.target
