@@ -1,60 +1,48 @@
 const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
 
-// Map of ISO language codes to the best natural Microsoft Edge Neural voices
-const VOICE_MAP = {
-  ms: 'ms-MY-YasminNeural', // Bahasa Melayu (Female)
-  my: 'ms-MY-YasminNeural',
-  id: 'id-ID-GadisNeural', // Bahasa Indonesia (Female)
-  en: 'en-US-JennyNeural', // English (Female)
-  ja: 'ja-JP-NanamiNeural', // Japanese (Female)
-  ko: 'ko-KR-SunHiNeural', // Korean (Female)
-  zh: 'zh-CN-XiaoxiaoNeural', // Chinese Mandarin (Female)
-  ar: 'ar-SA-ZariyahNeural', // Arabic (Female)
-  es: 'es-ES-ElviraNeural', // Spanish (Female)
-  fr: 'fr-FR-DeniseNeural', // French (Female)
-  de: 'de-DE-KatjaNeural', // German (Female)
-  ru: 'ru-RU-SvetlanaNeural', // Russian (Female)
-  hi: 'hi-IN-SwaraNeural', // Hindi (Female)
-  th: 'th-TH-PremwadeeNeural', // Thai (Female)
-  vi: 'vi-VN-HoaiMyNeural', // Vietnamese (Female)
-  tl: 'fil-PH-BlessicaNeural', // Tagalog (Female)
-  fil: 'fil-PH-BlessicaNeural',
+// Supported voices: 2 languages with distinct male/female personas
+const PERSONA_VOICES = {
+  yasmin: 'ms-MY-YasminNeural', // Malay (Female)
+  osman: 'ms-MY-OsmanNeural',   // Malay (Male)
+  guy: 'en-US-GuyNeural',       // English (Male)
+  jenny: 'en-US-JennyNeural',   // English (Female)
+};
+
+// Default persona per language:
+// Malay -> Yasmin (Female)
+// English -> Guy (Male) - Different person!
+const DEFAULT_VOICES = {
+  ms: 'ms-MY-YasminNeural',
+  en: 'en-US-GuyNeural',
 };
 
 // Common Malay keywords to help with detection if tag is missing
 const MALAY_REGEX =
   /\b(siapa|apa|kenapa|mengapa|bila|di mana|dimana|awak|saya|kamu|kita|babi|anjing|kucing|makan|minum|tidur|buat|tak|nak|boleh|tolong|ada|ke|kat|macam|ni|tu|soalan|jawapan|ialah|adalah)\b/i;
 
-const INDO_REGEX =
-  /\b(apakah|siapakah|mengapa|kenapa|gimana|nggak|bisa|kamu|aku|banget|udah|dong|pertanyaan|adalah)\b/i;
-
 class TTSService {
   constructor() {
-    this.defaultVoice = process.env.TTS_VOICE || 'en-US-JennyNeural';
+    this.defaultVoice = process.env.TTS_VOICE || DEFAULT_VOICES.en;
     this.outputFormat = OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3;
   }
 
   /**
-   * Automatically picks the most natural neural voice for the detected language.
-   * @param {string} [langCode] - ISO language code (e.g. 'ms', 'en', 'id', 'ja')
-   * @param {string} [sampleText] - Text to inspect for Malay/Indonesian keywords as fallback
+   * Resolves neural voice based on language (Malay: Yasmin / English: Guy) or requested persona.
+   * @param {string} [langCode] - 'ms' or 'en'
+   * @param {string} [sampleText] - Text to inspect for Malay keywords
+   * @param {string} [requestedVoice] - Optional specific persona ('yasmin', 'osman', 'guy', 'jenny')
    * @returns {string} Edge neural voice name
    */
-  resolveVoice(langCode, sampleText = '') {
-    if (langCode && VOICE_MAP[langCode.toLowerCase()]) {
-      return VOICE_MAP[langCode.toLowerCase()];
+  resolveVoice(langCode, sampleText = '', requestedVoice = null) {
+    if (requestedVoice && PERSONA_VOICES[requestedVoice.toLowerCase()]) {
+      return PERSONA_VOICES[requestedVoice.toLowerCase()];
     }
 
-    if (sampleText) {
-      if (MALAY_REGEX.test(sampleText)) {
-        return VOICE_MAP.ms;
-      }
-      if (INDO_REGEX.test(sampleText)) {
-        return VOICE_MAP.id;
-      }
+    if (langCode === 'ms' || (sampleText && MALAY_REGEX.test(sampleText))) {
+      return DEFAULT_VOICES.ms;
     }
 
-    return this.defaultVoice;
+    return DEFAULT_VOICES.en;
   }
 
   /**
@@ -112,5 +100,6 @@ class TTSService {
 
 module.exports = {
   TTSService,
-  VOICE_MAP,
+  PERSONA_VOICES,
+  DEFAULT_VOICES,
 };

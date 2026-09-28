@@ -9,6 +9,19 @@ module.exports = {
         .setName('question')
         .setDescription('What do you want to ask?')
         .setRequired(true)
+    )
+    .addStringOption((option) =>
+      option
+        .setName('voice')
+        .setDescription('Optional: Choose speaker persona')
+        .setRequired(false)
+        .addChoices(
+          { name: 'Auto (Malay: Yasmin / English: Guy)', value: 'auto' },
+          { name: 'Malay (Yasmin - Female)', value: 'yasmin' },
+          { name: 'Malay (Osman - Male)', value: 'osman' },
+          { name: 'English (Guy - Male)', value: 'guy' },
+          { name: 'English (Jenny - Female)', value: 'jenny' }
+        )
     ),
 
   /**
@@ -17,6 +30,7 @@ module.exports = {
    */
   async execute(interaction, { voiceManager, aiService }) {
     const question = interaction.options.getString('question');
+    const requestedVoice = interaction.options.getString('voice');
 
     // Defer reply immediately since AI generation + TTS takes 1-3 seconds
     await interaction.deferReply();
@@ -50,10 +64,11 @@ module.exports = {
       // 1. Generate concise, voice-tailored answer from Gemini addressing the user
       const { rawText, speechText, langCode } = await aiService.askQuestion(question, userName);
 
-      // 2. Resolve language-specific neural voice (e.g. Malay Yasmin, Indonesian Gadis, etc.)
+      // 2. Resolve language-specific neural voice (Malay: Yasmin / English: Guy)
       const selectedVoice = voiceManager.ttsService.resolveVoice(
         langCode,
-        `${question} ${speechText}`
+        `${question} ${speechText}`,
+        requestedVoice === 'auto' ? null : requestedVoice
       );
 
       // 3. Play or mix the audio in the voice channel (with ducking if music is active)
@@ -68,12 +83,10 @@ module.exports = {
 
       // 4. Friendly label for the voice
       let voiceLabel = selectedVoice;
-      if (selectedVoice.includes('Yasmin')) voiceLabel = 'Malay (Yasmin)';
-      else if (selectedVoice.includes('Osman')) voiceLabel = 'Malay (Osman)';
-      else if (selectedVoice.includes('Gadis')) voiceLabel = 'Indonesian (Gadis)';
-      else if (selectedVoice.includes('Jenny')) voiceLabel = 'English (Jenny)';
-      else if (selectedVoice.includes('Nanami')) voiceLabel = 'Japanese (Nanami)';
-      else if (selectedVoice.includes('Xiaoxiao')) voiceLabel = 'Chinese (Xiaoxiao)';
+      if (selectedVoice.includes('Yasmin')) voiceLabel = 'Malay (Yasmin - Female)';
+      else if (selectedVoice.includes('Osman')) voiceLabel = 'Malay (Osman - Male)';
+      else if (selectedVoice.includes('Guy')) voiceLabel = 'English (Guy - Male)';
+      else if (selectedVoice.includes('Jenny')) voiceLabel = 'English (Jenny - Female)';
 
       // 5. Display the response embed in text chat
       const isMusicPlaying = guildState?.currentTrack?.type === 'song';
