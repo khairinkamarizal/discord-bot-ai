@@ -5,12 +5,25 @@ const { Transform } = require('stream');
  * and allows mixing an incoming TTS voice stream over it with smooth volume ducking.
  */
 class DuckingMixer extends Transform {
-  constructor() {
+  constructor(baseVolume = 0.5) {
     super();
-    this.musicVolume = 1.0;
+    this.baseVolume = baseVolume;
+    this.musicVolume = baseVolume;
+    this.ttsVolume = 0.55;
     this.ttsBuffer = Buffer.alloc(0);
     this.isSpeaking = false;
     this.fadeTimer = null;
+  }
+
+  /**
+   * Sets the active base music volume.
+   * @param {number} vol - 0.05 to 1.0
+   */
+  setBaseVolume(vol) {
+    this.baseVolume = Math.max(0.05, Math.min(1.0, vol));
+    if (!this.isSpeaking) {
+      this.musicVolume = this.baseVolume;
+    }
   }
 
   /**
@@ -44,20 +57,20 @@ class DuckingMixer extends Transform {
 
   /**
    * Called when AI voice begins speaking.
-   * Slowly reduces background music volume to 20% (0.2).
+   * Slowly reduces background music volume to 20% of base.
    */
   startSpeech() {
     this.isSpeaking = true;
-    this.fadeMusicVolume(0.2, 500);
+    this.fadeMusicVolume(this.baseVolume * 0.2, 500);
   }
 
   /**
    * Called when AI voice finishes speaking.
-   * Smoothly restores music volume back to 100% (1.0).
+   * Smoothly restores music volume back to base level.
    */
   endSpeech() {
     this.isSpeaking = false;
-    this.fadeMusicVolume(1.0, 750);
+    this.fadeMusicVolume(this.baseVolume, 750);
   }
 
   /**
@@ -98,7 +111,7 @@ class DuckingMixer extends Transform {
     for (let i = 0; i < int16Music.length; i++) {
       let sample = int16Music[i] * vol;
       if (int16TTS && i < int16TTS.length) {
-        sample += int16TTS[i];
+        sample += int16TTS[i] * this.ttsVolume;
       }
 
       // 16-bit PCM integer clipping

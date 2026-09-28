@@ -92,6 +92,8 @@ class VoiceManager {
       currentTrack: null,
       activeMixer: null,
       musicFFmpeg: null,
+      currentResource: null,
+      volume: 0.5, // 50% comfortable default volume
       isPlaying: false,
       channelId: channel.id,
       channelName: channel.name,
@@ -171,6 +173,7 @@ class VoiceManager {
    * @private
    */
   _cleanupStreams(guildState) {
+    guildState.currentResource = null;
     if (guildState.musicFFmpeg) {
       try {
         guildState.musicFFmpeg.destroy();
@@ -318,8 +321,8 @@ class VoiceManager {
 
     try {
       if (currentItem.type === 'song') {
-        // Create DuckingMixer to allow real-time background voice ducking
-        const mixer = new DuckingMixer();
+        // Create DuckingMixer to allow real-time background voice ducking with configured volume
+        const mixer = new DuckingMixer(guildState.volume ?? 0.5);
         guildState.activeMixer = mixer;
 
         // Build FFmpeg args using system ffmpeg with -nostdin to prevent blocking
@@ -367,6 +370,7 @@ class VoiceManager {
         const resource = createAudioResource(mixer, {
           inputType: StreamType.Raw,
         });
+        guildState.currentResource = resource;
 
         guildState.player.play(resource);
       } else {
@@ -374,7 +378,10 @@ class VoiceManager {
         const stream = await this.ttsService.getAudioStream(currentItem.text, currentItem.voice);
         const resource = createAudioResource(stream, {
           inputType: StreamType.Arbitrary,
+          inlineVolume: true,
         });
+        resource.volume?.setVolume(guildState.volume ?? 0.5);
+        guildState.currentResource = resource;
         guildState.player.play(resource);
       }
     } catch (err) {
@@ -472,6 +479,41 @@ class VoiceManager {
    */
   getState(guildId) {
     return this.guilds.get(guildId);
+  }
+
+  /**
+   * Sets playback volume for a guild (0.05 to 1.0).
+   * @param {string} guildId
+   * @param {number} volume - Float between 0.05 and 1.0
+   * @returns {number} The updated volume percentage (5 to 100)
+   */
+  setVolume(guildId, volume) {
+    const guildState = this.guilds.get(guildId);
+    if (!guildState) {
+      throw new Error('Bot is not connected to a voice channel.');
+    }
+
+    const clamped = Math.max(0.05, Math.min(1.0, volume));
+    guildState.volume = clamped;
+
+    if (guildState.activeMixer) {
+      guildState.activeMixer.setBaseVolume(clamped);
+    }
+    if (guildState.currentResource?.volume) {
+      guildState.currentResource.volume.setVolume(clamped);
+    }
+
+    return Math.round(clamped * 100);
+  }
+
+  /**
+   * Gets current volume percentage for a guild.
+   * @param {string} guildId
+   * @returns {number} Percentage (5 to 100)
+   */
+  getVolume(guildId) {
+    const guildState = this.guilds.get(guildId);
+    return Math.round((guildState?.volume ?? 0.5) * 100);
   }
 }
 
