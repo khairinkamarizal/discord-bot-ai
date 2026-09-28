@@ -12,7 +12,9 @@ class DuckingMixer extends Transform {
     this.ttsVolume = 0.55;
     this.ttsBuffer = Buffer.alloc(0);
     this.isSpeaking = false;
+    this.ttsInputEnded = false;
     this.fadeTimer = null;
+    this.speechEndTimer = null;
   }
 
   /**
@@ -57,19 +59,39 @@ class DuckingMixer extends Transform {
 
   /**
    * Called when AI voice begins speaking.
-   * Slowly reduces background music volume to 20% of base.
+   * Smoothly reduces background music volume to 20% of base.
    */
   startSpeech() {
+    if (this.speechEndTimer) {
+      clearTimeout(this.speechEndTimer);
+      this.speechEndTimer = null;
+    }
     this.isSpeaking = true;
-    this.fadeMusicVolume(this.baseVolume * 0.2, 500);
+    this.ttsInputEnded = false;
+    this.fadeMusicVolume(this.baseVolume * 0.2, 400);
   }
 
   /**
-   * Called when AI voice finishes speaking.
+   * Called when TTS stream producer finishes sending all audio chunks.
+   */
+  notifyTTSEnd() {
+    this.ttsInputEnded = true;
+    if (this.ttsBuffer.length === 0 && this.isSpeaking) {
+      this.endSpeech();
+    }
+  }
+
+  /**
+   * Called when AI voice finishes speaking all buffered audio.
    * Smoothly restores music volume back to base level.
    */
   endSpeech() {
+    if (this.speechEndTimer) {
+      clearTimeout(this.speechEndTimer);
+      this.speechEndTimer = null;
+    }
     this.isSpeaking = false;
+    this.ttsInputEnded = false;
     this.fadeMusicVolume(this.baseVolume, 750);
   }
 
@@ -93,6 +115,15 @@ class DuckingMixer extends Transform {
         ttsChunk = Buffer.alloc(bytesNeeded, 0);
         this.ttsBuffer.copy(ttsChunk, 0);
         this.ttsBuffer = Buffer.alloc(0);
+      }
+
+      // Check if buffer just drained and all chunks were already pushed
+      if (this.ttsBuffer.length === 0 && this.ttsInputEnded && this.isSpeaking && !this.speechEndTimer) {
+        this.speechEndTimer = setTimeout(() => {
+          if (this.ttsBuffer.length === 0 && this.isSpeaking) {
+            this.endSpeech();
+          }
+        }, 500);
       }
     }
 
@@ -128,6 +159,10 @@ class DuckingMixer extends Transform {
     if (this.fadeTimer) {
       clearInterval(this.fadeTimer);
       this.fadeTimer = null;
+    }
+    if (this.speechEndTimer) {
+      clearTimeout(this.speechEndTimer);
+      this.speechEndTimer = null;
     }
     this.ttsBuffer = Buffer.alloc(0);
     super.destroy(err);

@@ -264,17 +264,13 @@ class VoiceManager {
           mixer.addTTSChunk(chunk);
         });
 
-        const finishSpeech = () => {
-          // Allow audio queue to drain then smoothly raise music back to 100%
-          setTimeout(() => {
-            mixer.endSpeech();
-          }, 400);
-        };
+        ttsFFmpeg.once('end', () => {
+          mixer.notifyTTSEnd();
+        });
 
-        ttsFFmpeg.once('end', finishSpeech);
         ttsFFmpeg.once('error', (err) => {
           console.error('TTS FFmpeg error during ducking:', err);
-          finishSpeech();
+          mixer.endSpeech();
         });
       } catch (err) {
         console.error('Failed to overlay TTS speech over music:', err);
