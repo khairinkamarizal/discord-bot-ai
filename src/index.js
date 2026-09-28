@@ -9,6 +9,17 @@ const {
   ActivityType,
 } = require('discord.js');
 
+const prism = require('prism-media');
+
+// Force prism-media to use system FFmpeg from PATH instead of bundled static binaries
+// (static ffmpeg builds hang on HTTPS/HLS audio streams on Linux)
+const systemFFmpeg = process.env.FFMPEG_PATH || 'ffmpeg';
+prism.FFmpeg.getInfo = () => ({
+  command: systemFFmpeg,
+  output: 'system ffmpeg',
+  version: 'system',
+});
+
 const { VoiceManager } = require('./voice/player');
 const { AIService } = require('./services/ai');
 const { MusicService } = require('./services/music');

@@ -1,9 +1,13 @@
-const ffmpegPath = require('ffmpeg-static');
-if (ffmpegPath && !process.env.FFMPEG_PATH) {
-  process.env.FFMPEG_PATH = ffmpegPath;
-}
-
 const prism = require('prism-media');
+
+// Prefer system FFmpeg binary over bundled static binaries (which hang on HTTPS streams in Linux)
+const systemFFmpeg = process.env.FFMPEG_PATH || 'ffmpeg';
+prism.FFmpeg.getInfo = () => ({
+  command: systemFFmpeg,
+  output: 'system ffmpeg',
+  version: 'system',
+});
+
 const {
   joinVoiceChannel,
   createAudioPlayer,
@@ -13,6 +17,7 @@ const {
   entersState,
   getVoiceConnection,
   StreamType,
+  NoSubscriberBehavior,
 } = require('@discordjs/voice');
 
 const { TTSService } = require('../services/tts');
@@ -73,7 +78,11 @@ class VoiceManager {
       throw err;
     }
 
-    const player = createAudioPlayer();
+    const player = createAudioPlayer({
+      behaviors: {
+        noSubscriber: NoSubscriberBehavior.Play,
+      },
+    });
     connection.subscribe(player);
 
     guildState = {
@@ -89,6 +98,11 @@ class VoiceManager {
     };
 
     this.guilds.set(guildId, guildState);
+
+    // Audio player state tracking and logging
+    player.on('stateChange', (oldState, newState) => {
+      console.log(`🎵 Player [${channel.guild.name} #${channel.name}]: ${oldState.status} ➔ ${newState.status}`);
+    });
 
     // Advance queue on track completion
     player.on(AudioPlayerStatus.Idle, () => {
@@ -227,12 +241,18 @@ class VoiceManager {
         // 3. Transcode TTS stream to 48kHz 16-bit stereo PCM
         const ttsFFmpeg = new prism.FFmpeg({
           args: [
+            '-nostdin',
             '-analyzeduration', '0',
             '-loglevel', '0',
             '-f', 's16le',
             '-ar', '48000',
             '-ac', '2',
           ],
+        });
+
+        ttsStream.on('error', (err) => {
+          console.error('TTS stream error during ducking:', err);
+          finishSpeech();
         });
 
         ttsStream.pipe(ttsFFmpeg);
@@ -302,23 +322,44 @@ class VoiceManager {
         const mixer = new DuckingMixer();
         guildState.activeMixer = mixer;
 
-        // FFmpeg stream input -> 48kHz 16-bit stereo PCM
+        // Build FFmpeg args using system ffmpeg with -nostdin to prevent blocking
+        const ffmpegArgs = [
+          '-nostdin',
+          '-analyzeduration', '0',
+          '-loglevel', '0',
+        ];
+
+        let isStreamInput = false;
+        if (typeof currentItem.streamUrl === 'string') {
+          ffmpegArgs.push('-i', currentItem.streamUrl);
+        } else if (currentItem.streamUrl && typeof currentItem.streamUrl.pipe === 'function') {
+          isStreamInput = true;
+        }
+
+        ffmpegArgs.push(
+          '-f', 's16le',
+          '-ar', '48000',
+          '-ac', '2',
+        );
+
         const musicFFmpeg = new prism.FFmpeg({
-          args: [
-            '-analyzeduration', '0',
-            '-loglevel', '0',
-            '-i', currentItem.streamUrl,
-            '-f', 's16le',
-            '-ar', '48000',
-            '-ac', '2',
-          ],
+          args: ffmpegArgs,
         });
         guildState.musicFFmpeg = musicFFmpeg;
+
+        if (isStreamInput) {
+          currentItem.streamUrl.pipe(musicFFmpeg);
+        }
 
         musicFFmpeg.pipe(mixer);
 
         musicFFmpeg.on('error', (err) => {
-          console.error('Music stream FFmpeg error:', err);
+          console.error(`Music stream FFmpeg error for "${currentItem.title}":`, err);
+          this.playNext(guildId);
+        });
+
+        mixer.on('error', (err) => {
+          console.error(`Mixer stream error for "${currentItem.title}":`, err);
           this.playNext(guildId);
         });
 

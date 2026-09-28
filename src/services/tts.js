@@ -83,9 +83,12 @@ class TTSService {
     };
 
     audioStream.once('close', cleanup);
-    audioStream.once('error', (err) => {
+    audioStream.once('end', cleanup);
+    audioStream.on('error', (err) => {
       cleanup();
-      console.error(`TTS audio stream error [${selectedVoice}]:`, err);
+      if (err.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
+        console.error(`TTS audio stream error [${selectedVoice}]:`, err);
+      }
     });
 
     return audioStream;
