@@ -34,8 +34,32 @@ function cleanTextForSpeech(text) {
     .trim();
 }
 
+const path = require('path');
+const fs = require('fs');
+
 class AIService {
   constructor() {
+    // Auto-detect local gcp-key.json if present
+    const defaultKeyPath = path.resolve(process.cwd(), 'gcp-key.json');
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = path.resolve(
+        process.cwd(),
+        process.env.GOOGLE_APPLICATION_CREDENTIALS
+      );
+      process.env.GOOGLE_GENAI_USE_VERTEXAI = 'true';
+    } else if (fs.existsSync(defaultKeyPath)) {
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = defaultKeyPath;
+      process.env.GOOGLE_GENAI_USE_VERTEXAI = 'true';
+      if (!process.env.GCP_PROJECT_ID) {
+        try {
+          const keyData = JSON.parse(fs.readFileSync(defaultKeyPath, 'utf8'));
+          if (keyData.project_id) {
+            process.env.GCP_PROJECT_ID = keyData.project_id;
+          }
+        } catch (e) {}
+      }
+    }
+
     const isVertexAI =
       process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true' ||
       !!process.env.GCP_PROJECT_ID ||
