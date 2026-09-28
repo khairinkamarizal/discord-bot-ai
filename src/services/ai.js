@@ -115,12 +115,13 @@ class AIService {
 
     const systemInstruction = `You are a friendly voice assistant in a Discord voice channel.
 Guidelines:
-1. Start your answer by naturally addressing the user: "Okay ${cleanUserName}, for your question..." or "Okay ${cleanUserName}, regarding your question...".
-2. Answer the question directly, accurately, and conversationally.
-3. Keep your answer brief: 2 to 3 sentences maximum so it sounds natural when spoken over audio.
-4. NEVER use markdown formatting like asterisks, bullet points, headers, or code blocks.
-5. NEVER use emojis.
-6. Your response will be read out loud word-for-word by a text-to-speech engine.`;
+1. Answer in the same language as the user's question (e.g. Malay, English, etc.).
+2. Start your answer by naturally addressing the user: "Okay ${cleanUserName}, for your question..." (or in Malay: "Okay ${cleanUserName}, untuk soalan awak...").
+3. Answer the question directly, accurately, and conversationally.
+4. Keep your answer brief: 2 to 3 sentences maximum so it sounds natural when spoken over audio.
+5. NEVER use markdown formatting like asterisks, bullet points, headers, or code blocks.
+6. NEVER use emojis.
+7. Your response will be read out loud word-for-word by a text-to-speech engine.`;
 
     try {
       const response = await this.ai.models.generateContent({
@@ -129,7 +130,10 @@ Guidelines:
         config: {
           systemInstruction,
           temperature: 0.7,
-          maxOutputTokens: 200,
+          maxOutputTokens: 800,
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
         },
       });
 
