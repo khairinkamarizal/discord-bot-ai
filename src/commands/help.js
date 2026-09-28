@@ -99,7 +99,7 @@ module.exports = {
           { name: '💬 Spoken Answer', value: rawText.slice(0, 1024) }
         )
         .setFooter({
-          text: `🔊 #${channelName} • Voice: ${voiceLabel}${isMusicPlaying ? ' • Music ducked to 20%' : ''} • Powered by Gemini & Edge TTS`,
+          text: `🔊 #${channelName} • Voice: ${voiceLabel}${isMusicPlaying ? ' • Music ducked' : ''} • kh.AI by Khairin`,
         })
         .setTimestamp();
 
