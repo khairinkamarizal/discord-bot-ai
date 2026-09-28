@@ -78,20 +78,19 @@ client.once(Events.ClientReady, async (readyClient) => {
 
   // Register slash commands automatically
   try {
-    const guildId = process.env.GUILD_ID;
-    if (guildId) {
-      console.log(
-        `⚡ Registering slash commands for testing guild ID: ${guildId}...`,
-      );
-      await readyClient.application.commands.set(slashCommandsData, guildId);
-      console.log('✅ Guild slash commands registered instantly!');
-    } else {
-      console.log(
-        '🌐 Registering global slash commands (may take a few minutes to cache across all servers)...',
-      );
-      await readyClient.application.commands.set(slashCommandsData);
-      console.log('✅ Global slash commands registered successfully!');
+    // 1. Instant registration for all current guilds (bypasses Discord's 1-hour global cache delay)
+    for (const [id, guild] of readyClient.guilds.cache) {
+      try {
+        await guild.commands.set(slashCommandsData);
+        console.log(`⚡ Instant slash commands registered for server: ${guild.name} (${id})`);
+      } catch (err) {
+        console.warn(`Could not register instant commands for guild ${guild.name}:`, err.message);
+      }
     }
+
+    // 2. Global registration for cross-server caching
+    await readyClient.application.commands.set(slashCommandsData);
+    console.log('✅ Global slash commands synced successfully!');
   } catch (error) {
     console.error('❌ Error registering slash commands:', error);
   }
