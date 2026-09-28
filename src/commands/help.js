@@ -48,18 +48,34 @@ module.exports = {
       const userName = interaction.member?.displayName || interaction.user.username;
 
       // 1. Generate concise, voice-tailored answer from Gemini addressing the user
-      const { rawText, speechText } = await aiService.askQuestion(question, userName);
+      const { rawText, speechText, langCode } = await aiService.askQuestion(question, userName);
 
-      // 2. Play or mix the audio in the voice channel (with ducking if music is active)
+      // 2. Resolve language-specific neural voice (e.g. Malay Yasmin, Indonesian Gadis, etc.)
+      const selectedVoice = voiceManager.ttsService.resolveVoice(
+        langCode,
+        `${question} ${speechText}`
+      );
+
+      // 3. Play or mix the audio in the voice channel (with ducking if music is active)
       const guildState = voiceManager.getState(interaction.guildId);
       const channelName = guildState?.channelName || 'voice';
 
       await voiceManager.speak(interaction.guildId, speechText, {
         question,
         userName,
+        voice: selectedVoice,
       });
 
-      // 3. Display the response embed in text chat
+      // 4. Friendly label for the voice
+      let voiceLabel = selectedVoice;
+      if (selectedVoice.includes('Yasmin')) voiceLabel = 'Malay (Yasmin)';
+      else if (selectedVoice.includes('Osman')) voiceLabel = 'Malay (Osman)';
+      else if (selectedVoice.includes('Gadis')) voiceLabel = 'Indonesian (Gadis)';
+      else if (selectedVoice.includes('Jenny')) voiceLabel = 'English (Jenny)';
+      else if (selectedVoice.includes('Nanami')) voiceLabel = 'Japanese (Nanami)';
+      else if (selectedVoice.includes('Xiaoxiao')) voiceLabel = 'Chinese (Xiaoxiao)';
+
+      // 5. Display the response embed in text chat
       const isMusicPlaying = guildState?.currentTrack?.type === 'song';
       const embed = new EmbedBuilder()
         .setColor(0x5865f2)
@@ -70,7 +86,7 @@ module.exports = {
           { name: '💬 Spoken Answer', value: rawText.slice(0, 1024) }
         )
         .setFooter({
-          text: `🔊 Spoken in #${channelName}${isMusicPlaying ? ' (music ducked to 20% background)' : ''} • Powered by Gemini & Edge TTS`,
+          text: `🔊 #${channelName} • Voice: ${voiceLabel}${isMusicPlaying ? ' • Music ducked to 20%' : ''} • Powered by Gemini & Edge TTS`,
         })
         .setTimestamp();
 

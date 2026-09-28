@@ -115,13 +115,14 @@ class AIService {
 
     const systemInstruction = `You are a friendly voice assistant in a Discord voice channel.
 Guidelines:
-1. Answer in the same language as the user's question (e.g. Malay, English, etc.).
-2. Start your answer by naturally addressing the user: "Okay ${cleanUserName}, for your question..." (or in Malay: "Okay ${cleanUserName}, untuk soalan awak...").
-3. Answer the question directly, accurately, and conversationally.
-4. Keep your answer brief: 2 to 3 sentences maximum so it sounds natural when spoken over audio.
-5. NEVER use markdown formatting like asterisks, bullet points, headers, or code blocks.
-6. NEVER use emojis.
-7. Your response will be read out loud word-for-word by a text-to-speech engine.`;
+1. Detect the language of the user's question. At the VERY start of your response, output a language tag: [LANG:ms] for Malay, [LANG:en] for English, [LANG:id] for Indonesian, [LANG:ja] for Japanese, [LANG:zh] for Chinese, [LANG:ar] for Arabic, etc.
+2. Answer in the same language as the user's question.
+3. Start your answer by naturally addressing the user: e.g. "Okay ${cleanUserName}, untuk soalan awak..." (Malay) or "Okay ${cleanUserName}, for your question..." (English).
+4. Answer the question directly, accurately, and conversationally.
+5. Keep your answer brief: 2 to 3 sentences maximum so it sounds natural when spoken over audio.
+6. NEVER use markdown formatting like asterisks, bullet points, headers, or code blocks.
+7. NEVER use emojis.
+8. Your response will be read out loud word-for-word by a text-to-speech engine.`;
 
     try {
       const response = await this.ai.models.generateContent({
@@ -137,10 +138,17 @@ Guidelines:
         },
       });
 
-      const rawText = response.text?.trim() || 'Sorry, I could not generate an answer.';
+      let rawText = response.text?.trim() || 'Sorry, I could not generate an answer.';
+      let langCode = null;
+      const langMatch = rawText.match(/^\[LANG:([a-z-]+)\]\s*/i);
+      if (langMatch) {
+        langCode = langMatch[1].toLowerCase();
+        rawText = rawText.replace(/^\[LANG:[a-z-]+\]\s*/i, '').trim();
+      }
+
       const speechText = cleanTextForSpeech(rawText);
 
-      return { rawText, speechText };
+      return { rawText, speechText, langCode };
     } catch (error) {
       console.error('Gemini API Error:', error);
       throw error;

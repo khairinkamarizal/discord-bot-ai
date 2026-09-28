@@ -221,8 +221,8 @@ class VoiceManager {
       mixer.startSpeech();
 
       try {
-        // 2. Generate TTS audio stream
-        const ttsStream = await this.ttsService.getAudioStream(speechText);
+        // 2. Generate TTS audio stream with language-specific voice
+        const ttsStream = await this.ttsService.getAudioStream(speechText, meta.voice);
 
         // 3. Transcode TTS stream to 48kHz 16-bit stereo PCM
         const ttsFFmpeg = new prism.FFmpeg({
@@ -330,7 +330,7 @@ class VoiceManager {
         guildState.player.play(resource);
       } else {
         // Standalone TTS speech
-        const stream = await this.ttsService.getAudioStream(currentItem.text);
+        const stream = await this.ttsService.getAudioStream(currentItem.text, currentItem.voice);
         const resource = createAudioResource(stream, {
           inputType: StreamType.Arbitrary,
         });
