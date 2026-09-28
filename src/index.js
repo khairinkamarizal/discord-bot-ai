@@ -41,6 +41,7 @@ client.commands = new Collection();
 const voiceManager = new VoiceManager();
 const aiService = new AIService();
 const musicService = new MusicService(client);
+voiceManager.setMusicService(musicService);
 
 // Load commands from commands directory
 const commandsPath = path.join(__dirname, 'commands');

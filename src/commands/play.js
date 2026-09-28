@@ -52,16 +52,57 @@ module.exports = {
     }
 
     try {
-      // Search and extract audio stream URL
-      const song = await musicService.searchAndExtract(query, interaction.user);
+      // Search and extract audio stream URL or full playlist
+      const searchResult = await musicService.searchAndExtract(query, interaction.user);
 
-      if (!song) {
+      if (!searchResult) {
         return interaction.editReply({
           content: `❌ No results found for: **${query}**`,
         });
       }
 
-      // Add to player
+      // CASE 1: Playlist (Spotify playlist/album, SoundCloud set, etc.)
+      if (searchResult.isPlaylist) {
+        const result = await voiceManager.playPlaylist(interaction.guildId, searchResult.tracks);
+
+        const embed = new EmbedBuilder()
+          .setColor(0x1db954)
+          .setTitle('📋 Playlist Added to Queue')
+          .setDescription(`[**${searchResult.playlist.title}**](${searchResult.playlist.url})`)
+          .addFields(
+            {
+              name: '🎵 Total Tracks',
+              value: `${searchResult.playlist.trackCount} songs`,
+              inline: true,
+            },
+            {
+              name: '👤 Creator',
+              value: searchResult.playlist.author || 'Various Artists',
+              inline: true,
+            },
+            {
+              name: '📊 Queue Status',
+              value: result.isPlayingNow
+                ? `▶️ Playing now: **${result.firstTrack.title}**`
+                : `Queued at position #${result.queuePosition}`,
+              inline: true,
+            }
+          )
+          .setFooter({
+            text: `Requested by ${interaction.user.tag} • Plays until /disconnect`,
+            iconURL: interaction.user.displayAvatarURL(),
+          })
+          .setTimestamp();
+
+        if (searchResult.playlist.thumbnail) {
+          embed.setThumbnail(searchResult.playlist.thumbnail);
+        }
+
+        return interaction.editReply({ embeds: [embed] });
+      }
+
+      // CASE 2: Single Song
+      const song = searchResult.song;
       const result = await voiceManager.playSong(interaction.guildId, song);
 
       const embed = new EmbedBuilder()

@@ -26,6 +26,7 @@ const { DuckingMixer } = require('./duckingMixer');
 class VoiceManager {
   constructor() {
     this.ttsService = new TTSService();
+    this.musicService = null;
     /**
      * Map of guildId -> {
      *   connection: VoiceConnection,
@@ -40,6 +41,14 @@ class VoiceManager {
      * }
      */
     this.guilds = new Map();
+  }
+
+  /**
+   * Sets music service for on-demand stream resolution.
+   * @param {import('../services/music').MusicService} musicService
+   */
+  setMusicService(musicService) {
+    this.musicService = musicService;
   }
 
   /**
@@ -216,6 +225,50 @@ class VoiceManager {
   }
 
   /**
+   * Pushes an entire playlist of songs to the queue.
+   * @param {string} guildId
+   * @param {Array<object>} tracks
+   * @returns {Promise<{ isPlayingNow: boolean, addedCount: number, firstTrack: object, queuePosition: number }>}
+   */
+  async playPlaylist(guildId, tracks) {
+    const guildState = this.guilds.get(guildId);
+    if (!guildState) {
+      throw new Error('Bot is not connected to a voice channel.');
+    }
+
+    if (!tracks || tracks.length === 0) {
+      throw new Error('No tracks found in playlist.');
+    }
+
+    const initialQueueLength = guildState.queue.length;
+    const isPlayingNow = !guildState.isPlaying;
+
+    for (const track of tracks) {
+      guildState.queue.push({
+        type: 'song',
+        ...track,
+      });
+    }
+
+    if (isPlayingNow) {
+      await this.playNext(guildId);
+      return {
+        isPlayingNow: true,
+        addedCount: tracks.length,
+        firstTrack: tracks[0],
+        queuePosition: 0,
+      };
+    } else {
+      return {
+        isPlayingNow: false,
+        addedCount: tracks.length,
+        firstTrack: tracks[0],
+        queuePosition: initialQueueLength + 1,
+      };
+    }
+  }
+
+  /**
    * Speaks AI answer in voice.
    * IF a song is playing: Smoothly ducks song volume to 20%, speaks over the background music,
    * then restores song volume back to 100% when finished!
@@ -317,6 +370,23 @@ class VoiceManager {
 
     try {
       if (currentItem.type === 'song') {
+        // Resolve stream on-demand if missing (e.g. queued from a playlist)
+        if (!currentItem.streamUrl) {
+          if (this.musicService && currentItem.track) {
+            try {
+              currentItem.streamUrl = await this.musicService.extractStream(currentItem.track);
+            } catch (err) {
+              console.error(
+                `⚠️ Could not stream track "${currentItem.title}" by ${currentItem.author}: ${err.message}. Skipping to next track.`
+              );
+              return this.playNext(guildId);
+            }
+          } else {
+            console.error(`⚠️ Track "${currentItem.title}" is missing streamUrl and resolver. Skipping.`);
+            return this.playNext(guildId);
+          }
+        }
+
         // Create DuckingMixer to allow real-time background voice ducking with configured volume
         const mixer = new DuckingMixer(guildState.volume ?? 0.20, 0.40);
         guildState.activeMixer = mixer;

@@ -13,7 +13,7 @@ Whenever someone uses `/help <question>`, the bot answers out loud in the voice 
 *   **`/ask <question>` & `/help <question>`**: Asks kh.AI a question. Responds naturally out loud in your voice channel with sharp, candid, and critical opinions (also outputs a text embed). If the bot isn't in a voice channel yet, it automatically joins you!
 *   **🧠 Conversation Memory**: Keeps track of recent context, topics, user names, and follow-up questions within the channel (sliding window of 8 exchanges, auto-expires after 45 minutes of inactivity).
 *   **`/reset`**: Wipes the conversational memory for the current channel for a clean slate.
-*   **`/play <song>`**: Streams music directly into the voice channel. Supports searching by song name, artist, or direct links from SoundCloud, Spotify, Apple Music, and audio streams.
+*   **`/play <song>`**: Streams music directly into the voice channel. Supports searching by song name, artist, direct links, and **Spotify playlists & albums** (automatically queues all songs in the playlist!). Also supports SoundCloud sets and Apple Music.
 *   **Playback Controls**: Full queue management with **`/skip`**, **`/pause`**, **`/resume`**, **`/queue`**, and **`/stop`**.
 *   **100% Free & Low-Cost Stack**:
     *   **AI**: Google Gemini (`gemini-2.5-flash` - fast, intelligent, highly cost-saving).
