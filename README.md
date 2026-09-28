@@ -54,14 +54,32 @@ Whenever someone uses `/help <question>`, the bot answers out loud in the voice 
     ```bash
     cp .env.example .env
     ```
-2.  Fill in the values in `.env`:
+2.  Fill in `.env` using **Option A** (Google Cloud API Key) or **Option B** (Vertex AI):
+
+    **Option A: Google Cloud API Key**
+    * In [Google Cloud Console](https://console.cloud.google.com/):
+      * Enable **Generative Language API** (or **Vertex AI API**).
+      * Go to **APIs & Services ➔ Credentials ➔ Create Credentials ➔ API Key**.
     ```env
     DISCORD_TOKEN=your_discord_bot_token_here
-    GEMINI_API_KEY=your_gemini_api_key_here
+    GEMINI_API_KEY=AIzaSy...your_gcp_api_key_here
     GEMINI_MODEL=gemini-2.5-flash
     TTS_VOICE=en-US-JennyNeural
-    GUILD_ID=
     ```
+
+    **Option B: Google Cloud Vertex AI (Service Account)**
+    * In [Google Cloud Console](https://console.cloud.google.com/):
+      * Enable **Vertex AI API**.
+      * Create a Service Account with **Vertex AI User** role and download the JSON key.
+    ```env
+    DISCORD_TOKEN=your_discord_bot_token_here
+    GCP_PROJECT_ID=your-gcp-project-id
+    GCP_LOCATION=us-central1
+    GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
+    GEMINI_MODEL=gemini-2.5-flash
+    TTS_VOICE=en-US-JennyNeural
+    ```
+
     > **Tip**: Set `GUILD_ID` to your Discord server ID during local testing to register slash commands instantly without waiting for global cache.
 
 ### 🎙️ Available TTS Voices

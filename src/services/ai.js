@@ -36,11 +36,36 @@ function cleanTextForSpeech(text) {
 
 class AIService {
   constructor() {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.warn('⚠️ WARNING: GEMINI_API_KEY is not set in environment variables.');
+    const isVertexAI =
+      process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true' ||
+      !!process.env.GCP_PROJECT_ID ||
+      !!process.env.GOOGLE_CLOUD_PROJECT;
+
+    if (isVertexAI) {
+      const project = process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
+      const location =
+        process.env.GCP_LOCATION || process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
+      console.log(`☁️ Google Cloud Vertex AI active (Project: ${project || 'ADC default'}, Location: ${location})`);
+
+      const options = {
+        vertexai: true,
+        project,
+        location,
+      };
+
+      if (process.env.GEMINI_API_KEY) {
+        options.apiKey = process.env.GEMINI_API_KEY;
+      }
+
+      this.ai = new GoogleGenAI(options);
+    } else {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        console.warn('⚠️ WARNING: Neither GEMINI_API_KEY nor GCP_PROJECT_ID is configured in your .env file.');
+      }
+      this.ai = new GoogleGenAI({ apiKey: apiKey || '' });
     }
-    this.ai = new GoogleGenAI({ apiKey: apiKey || '' });
+
     this.modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   }
 
@@ -51,8 +76,15 @@ class AIService {
    * @returns {Promise<{ rawText: string, speechText: string }>}
    */
   async askQuestion(question, userName = 'there') {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error('Gemini API key is not configured. Please add GEMINI_API_KEY to your .env file.');
+    const isVertexAI =
+      process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true' ||
+      !!process.env.GCP_PROJECT_ID ||
+      !!process.env.GOOGLE_CLOUD_PROJECT;
+
+    if (!process.env.GEMINI_API_KEY && !isVertexAI) {
+      throw new Error(
+        'Google Cloud credentials not found. Set GEMINI_API_KEY or GCP_PROJECT_ID / GOOGLE_APPLICATION_CREDENTIALS in your .env file.'
+      );
     }
 
     const cleanUserName = userName.replace(/[@#*`_~]/g, '').trim() || 'there';
