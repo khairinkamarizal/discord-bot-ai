@@ -11,11 +11,13 @@ Whenever someone uses `/help <question>`, the bot answers out loud in the voice 
 *   **`/join`**: Joins your current voice channel and stays connected until instructed otherwise.
 *   **`/disconnect`**: Leaves the voice channel and cleans up active audio streams.
 *   **`/help <question>`**: Asks Gemini AI a question and answers out loud in your voice channel with natural speech (also outputs a text embed). If the bot isn't in a voice channel yet, it automatically joins you!
-*   **`/stop`**: Stops current voice playback and clears any pending queued speech.
+*   **`/play <song>`**: Streams music directly into the voice channel. Supports searching by song name, artist, or direct links from SoundCloud, Spotify, Apple Music, and audio streams.
+*   **Playback Controls**: Full queue management with **`/skip`**, **`/pause`**, **`/resume`**, **`/queue`**, and **`/stop`**.
 *   **100% Free & Low-Cost Stack**:
     *   **AI**: Google Gemini (generous free tier on Google AI Studio).
     *   **TTS**: Microsoft Edge Neural TTS (completely free, zero API key required, high-fidelity neural voices).
-*   **Audio Queueing**: Automatically plays responses sequentially without overlapping or cutting off.
+    *   **Music**: Fast audio extraction powered by SoundCloud and streaming extractors (no YouTube datacenter IP blocking issues on VPS!).
+*   **Smart Audio Queueing**: Seamlessly handles multiple songs and AI speech responses.
 
 ---
 
@@ -162,4 +164,9 @@ pm2 startup
 | `/join` | Connects the bot to your current voice channel and stays there. |
 | `/disconnect` | Disconnects the bot from the voice channel. |
 | `/help question:<text>` | Queries Gemini AI and speaks the answer aloud in voice channel. |
-| `/stop` | Stops any audio currently playing and clears the speech queue. |
+| `/play song:<name/url>` | Plays a song by name or link (SoundCloud, Spotify, Apple Music, etc.). |
+| `/skip` | Skips the current song/speech to the next track in queue. |
+| `/pause` | Pauses audio playback. |
+| `/resume` | Resumes paused audio playback. |
+| `/queue` | Shows the currently playing song and upcoming queue. |
+| `/stop` | Stops any audio currently playing and clears the queue. |

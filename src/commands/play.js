@@ -1,0 +1,85 @@
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName('play')
+    .setDescription('Play a song in your voice channel (search by name, SoundCloud, or Spotify link)')
+    .addStringOption((option) =>
+      option
+        .setName('song')
+        .setDescription('Song title, artist name, or music URL')
+        .setRequired(true)
+    ),
+
+  /**
+   * @param {import('discord.js').ChatInputCommandInteraction} interaction
+   * @param {{ voiceManager: import('../voice/player').VoiceManager, musicService: import('../services/music').MusicService }} services
+   */
+  async execute(interaction, { voiceManager, musicService }) {
+    const query = interaction.options.getString('song');
+    const userChannel = interaction.member?.voice?.channel;
+
+    if (!userChannel) {
+      return interaction.reply({
+        content: '❌ You need to be in a voice channel first to play music!',
+        ephemeral: true,
+      });
+    }
+
+    await interaction.deferReply();
+
+    // Ensure bot is in voice channel
+    try {
+      await voiceManager.join(userChannel);
+    } catch (err) {
+      console.error('Failed to join voice channel for /play:', err);
+      return interaction.editReply({
+        content: '❌ Could not connect to your voice channel. Please check bot permissions.',
+      });
+    }
+
+    try {
+      // Search and extract audio stream URL
+      const song = await musicService.searchAndExtract(query, interaction.user);
+
+      if (!song) {
+        return interaction.editReply({
+          content: `❌ No results found for: **${query}**`,
+        });
+      }
+
+      // Add to player
+      const result = await voiceManager.playSong(interaction.guildId, song);
+
+      const embed = new EmbedBuilder()
+        .setColor(0x1db954)
+        .setTitle(result.isPlayingNow ? '▶️ Now Playing' : '🎵 Added to Queue')
+        .setDescription(`[**${song.title}**](${song.url})`)
+        .addFields(
+          { name: '👤 Artist / Channel', value: song.author || 'Unknown', inline: true },
+          { name: '⏱️ Duration', value: song.duration || 'Live / Unknown', inline: true },
+          {
+            name: '📊 Queue Position',
+            value: result.isPlayingNow ? 'Playing Now' : `#${result.position}`,
+            inline: true,
+          }
+        )
+        .setFooter({
+          text: `Requested by ${interaction.user.tag} • Plays until /disconnect`,
+          iconURL: interaction.user.displayAvatarURL(),
+        })
+        .setTimestamp();
+
+      if (song.thumbnail) {
+        embed.setThumbnail(song.thumbnail);
+      }
+
+      return interaction.editReply({ embeds: [embed] });
+    } catch (error) {
+      console.error('Error in /play command:', error);
+      return interaction.editReply({
+        content: `❌ Error playing song: ${error.message || 'An unexpected error occurred.'}`,
+      });
+    }
+  },
+};

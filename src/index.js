@@ -12,6 +12,7 @@ const {
 
 const { VoiceManager } = require('./voice/player');
 const { AIService } = require('./services/ai');
+const { MusicService } = require('./services/music');
 
 // Ensure token is provided
 if (!process.env.DISCORD_TOKEN) {
@@ -32,6 +33,7 @@ client.commands = new Collection();
 // Initialize services
 const voiceManager = new VoiceManager();
 const aiService = new AIService();
+const musicService = new MusicService(client);
 
 // Load commands from commands directory
 const commandsPath = path.join(__dirname, 'commands');
@@ -54,8 +56,13 @@ for (const file of commandFiles) {
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`🤖 Logged in as ${readyClient.user.tag}!`);
 
-  readyClient.user.setActivity('/help | AI Voice Assistant', {
+  readyClient.user.setActivity('/help & /play | AI Voice & Music', {
     type: ActivityType.Listening,
+  });
+
+  // Pre-initialize music extractors in background
+  musicService.init().catch((err) => {
+    console.error('Failed to pre-load music extractors:', err);
   });
 
   // Register slash commands automatically
@@ -89,6 +96,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await command.execute(interaction, {
       voiceManager,
       aiService,
+      musicService,
     });
   } catch (error) {
     console.error(`Error executing /${interaction.commandName}:`, error);

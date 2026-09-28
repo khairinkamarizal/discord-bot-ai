@@ -22,7 +22,8 @@ class VoiceManager {
      * Map of guildId -> {
      *   connection: VoiceConnection,
      *   player: AudioPlayer,
-     *   queue: Array<{ text: string, question?: string, onStart?: Function, onEnd?: Function }>,
+     *   queue: Array<QueueItem>,
+     *   currentItem: QueueItem | null,
      *   isPlaying: boolean,
      *   channelId: string,
      *   channelName: string,
@@ -39,8 +40,12 @@ class VoiceManager {
     const guildId = channel.guild.id;
     let guildState = this.guilds.get(guildId);
 
-    // If already in the exact same channel and connection is ready, reuse
-    if (guildState && guildState.channelId === channel.id && guildState.connection.state.status === VoiceConnectionStatus.Ready) {
+    // If already connected to the same channel and ready, reuse
+    if (
+      guildState &&
+      guildState.channelId === channel.id &&
+      guildState.connection.state.status === VoiceConnectionStatus.Ready
+    ) {
       return guildState;
     }
 
@@ -52,7 +57,6 @@ class VoiceManager {
       selfMute: false,
     });
 
-    // Wait until connection is ready
     await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
 
     const player = createAudioPlayer();
@@ -62,6 +66,7 @@ class VoiceManager {
       connection,
       player,
       queue: [],
+      currentItem: null,
       isPlaying: false,
       channelId: channel.id,
       channelName: channel.name,
@@ -69,7 +74,7 @@ class VoiceManager {
 
     this.guilds.set(guildId, guildState);
 
-    // Audio player event listeners
+    // When current track/speech finishes, advance queue
     player.on(AudioPlayerStatus.Idle, () => {
       this.playNext(guildId);
     });
@@ -79,16 +84,14 @@ class VoiceManager {
       this.playNext(guildId);
     });
 
-    // Handle connection state changes and unexpected disconnects
+    // Reconnection & cleanup listeners
     connection.on(VoiceConnectionStatus.Disconnected, async () => {
       try {
         await Promise.race([
           entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
           entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
         ]);
-        // Reconnecting successfully
       } catch (e) {
-        // Disconnect was permanent
         this.disconnect(guildId);
       }
     });
@@ -108,8 +111,10 @@ class VoiceManager {
     const guildState = this.guilds.get(guildId);
     if (guildState) {
       guildState.queue = [];
+      guildState.currentItem = null;
+      guildState.isPlaying = false;
       try {
-        guildState.player.stop();
+        guildState.player.stop(true);
       } catch (e) {}
       try {
         guildState.connection.destroy();
@@ -118,7 +123,6 @@ class VoiceManager {
       return true;
     }
 
-    // Check if there is an unmanaged connection
     const existing = getVoiceConnection(guildId);
     if (existing) {
       try {
@@ -131,37 +135,59 @@ class VoiceManager {
   }
 
   /**
-   * Enqueues text to be spoken via TTS in the guild's connected voice channel.
+   * Queues or immediately plays a song.
    * @param {string} guildId
-   * @param {string} text - Clean spoken text
-   * @param {object} meta - Optional callbacks or question info
+   * @param {object} song - Song metadata including streamUrl
+   * @returns {{ isPlayingNow: boolean, position: number }}
    */
-  async speak(guildId, text, meta = {}) {
+  async playSong(guildId, song) {
     const guildState = this.guilds.get(guildId);
     if (!guildState) {
-      throw new Error('Bot is not connected to a voice channel in this server.');
+      throw new Error('Bot is not connected to a voice channel.');
     }
 
-    guildState.queue.push({ text, ...meta });
+    const item = {
+      type: 'song',
+      ...song,
+    };
 
     if (!guildState.isPlaying) {
+      guildState.queue.push(item);
       await this.playNext(guildId);
+      return { isPlayingNow: true, position: 0 };
+    } else {
+      guildState.queue.push(item);
+      return { isPlayingNow: false, position: guildState.queue.length };
     }
   }
 
   /**
-   * Stops currently playing audio and clears the queue.
+   * Speaks text aloud in the voice channel (AI response).
+   * Prioritizes AI speech so users don't have to wait for an entire song to finish.
    * @param {string} guildId
+   * @param {string} speechText
+   * @param {object} meta
    */
-  stop(guildId) {
+  async speak(guildId, speechText, meta = {}) {
     const guildState = this.guilds.get(guildId);
-    if (guildState) {
-      guildState.queue = [];
-      guildState.isPlaying = false;
-      guildState.player.stop();
-      return true;
+    if (!guildState) {
+      throw new Error('Bot is not connected to a voice channel.');
     }
-    return false;
+
+    const item = {
+      type: 'tts',
+      text: speechText,
+      ...meta,
+    };
+
+    // If currently playing a song, insert the AI speech right at the front and switch
+    if (guildState.isPlaying) {
+      guildState.queue.unshift(item);
+      guildState.player.stop(true); // Triggers Idle -> plays the AI response immediately
+    } else {
+      guildState.queue.push(item);
+      await this.playNext(guildId);
+    }
   }
 
   /**
@@ -174,37 +200,119 @@ class VoiceManager {
 
     if (guildState.queue.length === 0) {
       guildState.isPlaying = false;
+      guildState.currentItem = null;
       return;
     }
 
     const currentItem = guildState.queue.shift();
+    guildState.currentItem = currentItem;
     guildState.isPlaying = true;
 
     try {
+      let resource;
+
+      if (currentItem.type === 'song') {
+        resource = createAudioResource(currentItem.streamUrl, {
+          inputType: StreamType.Arbitrary,
+        });
+      } else {
+        // TTS speech
+        const stream = await this.ttsService.getAudioStream(currentItem.text);
+        resource = createAudioResource(stream, {
+          inputType: StreamType.Arbitrary,
+        });
+      }
+
+      guildState.player.play(resource);
+
       if (currentItem.onStart) {
         currentItem.onStart();
       }
-
-      const stream = await this.ttsService.getAudioStream(currentItem.text);
-      const resource = createAudioResource(stream, {
-        inputType: StreamType.Arbitrary,
-      });
-
-      guildState.player.play(resource);
     } catch (err) {
-      console.error(`Failed to play TTS audio for guild ${guildId}:`, err);
+      console.error(`Failed to play audio in guild ${guildId}:`, err);
       if (currentItem.onError) {
         currentItem.onError(err);
       }
-      // Continue to next item
       this.playNext(guildId);
     }
   }
 
   /**
+   * Skips the currently playing item to the next in queue.
+   * @param {string} guildId
+   * @returns {object | null} Skipped item
+   */
+  skip(guildId) {
+    const guildState = this.guilds.get(guildId);
+    if (!guildState || !guildState.isPlaying) {
+      return null;
+    }
+
+    const skippedItem = guildState.currentItem;
+    guildState.player.stop(true);
+    return skippedItem;
+  }
+
+  /**
+   * Pauses the audio player.
+   * @param {string} guildId
+   */
+  pause(guildId) {
+    const guildState = this.guilds.get(guildId);
+    if (guildState && guildState.isPlaying) {
+      return guildState.player.pause();
+    }
+    return false;
+  }
+
+  /**
+   * Resumes the audio player.
+   * @param {string} guildId
+   */
+  resume(guildId) {
+    const guildState = this.guilds.get(guildId);
+    if (guildState) {
+      return guildState.player.unpause();
+    }
+    return false;
+  }
+
+  /**
+   * Stops playback and clears the entire queue.
+   * @param {string} guildId
+   */
+  stop(guildId) {
+    const guildState = this.guilds.get(guildId);
+    if (guildState) {
+      guildState.queue = [];
+      guildState.currentItem = null;
+      guildState.isPlaying = false;
+      guildState.player.stop(true);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Returns current queue information.
+   * @param {string} guildId
+   */
+  getQueue(guildId) {
+    const guildState = this.guilds.get(guildId);
+    if (!guildState) return null;
+
+    return {
+      currentItem: guildState.currentItem,
+      queue: [...guildState.queue],
+      isPlaying: guildState.isPlaying,
+      isPaused: guildState.player.state.status === AudioPlayerStatus.Paused,
+      channelName: guildState.channelName,
+    };
+  }
+
+  /**
    * Checks if bot is connected in a guild.
    * @param {string} guildId
-   * @returns {boolean}
    */
   isConnected(guildId) {
     return this.guilds.has(guildId);
