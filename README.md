@@ -10,14 +10,16 @@ Whenever someone uses `/help <question>`, the bot answers out loud in the voice 
 
 *   **`/join`**: Joins your current voice channel and stays connected until instructed otherwise.
 *   **`/disconnect`**: Leaves the voice channel and cleans up active audio streams.
-*   **`/help <question>`**: Asks Gemini AI a question and answers out loud in your voice channel with natural speech (also outputs a text embed). If the bot isn't in a voice channel yet, it automatically joins you!
+*   **`/ask <question>` & `/help <question>`**: Asks kh.AI a question. Responds naturally out loud in your voice channel with sharp, candid, and critical opinions (also outputs a text embed). If the bot isn't in a voice channel yet, it automatically joins you!
+*   **🧠 Conversation Memory**: Keeps track of recent context, topics, user names, and follow-up questions within the channel (sliding window of 8 exchanges, auto-expires after 45 minutes of inactivity).
+*   **`/reset`**: Wipes the conversational memory for the current channel for a clean slate.
 *   **`/play <song>`**: Streams music directly into the voice channel. Supports searching by song name, artist, or direct links from SoundCloud, Spotify, Apple Music, and audio streams.
 *   **Playback Controls**: Full queue management with **`/skip`**, **`/pause`**, **`/resume`**, **`/queue`**, and **`/stop`**.
 *   **100% Free & Low-Cost Stack**:
-    *   **AI**: Google Gemini (generous free tier on Google AI Studio).
+    *   **AI**: Google Gemini (`gemini-2.5-flash` - fast, intelligent, highly cost-saving).
     *   **TTS**: Microsoft Edge Neural TTS (completely free, zero API key required, high-fidelity neural voices).
     *   **Music**: Fast audio extraction powered by SoundCloud and streaming extractors (no YouTube datacenter IP blocking issues on VPS!).
-*   **🎧 DJ Mode & Audio Ducking**: If a song is playing when someone uses `/help`, the bot smoothly fades the song down to **20% volume** as background music, addresses the user by name (*"Okay @username, for your question..."*), and speaks the answer over the track. Once the answer finishes, the music volume seamlessly glides back up to 100%!
+*   **🎧 DJ Mode & Audio Ducking**: If a song is playing when someone uses `/help` or `/ask`, the bot smoothly fades the song down to **20% volume** as background music and speaks the answer over the track. Once the answer finishes, the music volume seamlessly glides back up to 100%!
 *   **Smart Audio Queueing**: Seamlessly handles multiple songs and AI speech responses.
 
 ---
@@ -180,9 +182,11 @@ pm2 startup
 
 | Command | Description |
 | :--- | :--- |
+| `/ask question:<text>` | Queries kh.AI with conversation memory and speaks natural critical opinions aloud. |
+| `/help question:<text>` | Alias for `/ask` — queries AI and speaks answer in voice channel. |
+| `/reset` | Wipes the AI conversation memory for the current channel. |
 | `/join` | Connects the bot to your current voice channel and stays there. |
 | `/disconnect` | Disconnects the bot from the voice channel. |
-| `/help question:<text>` | Queries Gemini AI and speaks the answer aloud in voice channel. |
 | `/play song:<name/url>` | Plays a song by name or link (SoundCloud, Spotify, Apple Music, etc.). |
 | `/skip` | Skips the current song/speech to the next track in queue. |
 | `/pause` | Pauses audio playback. |

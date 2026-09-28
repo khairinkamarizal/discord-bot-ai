@@ -61,8 +61,14 @@ module.exports = {
     try {
       const userName = interaction.member?.displayName || interaction.user.username;
 
-      // 1. Generate concise, voice-tailored answer from Gemini addressing the user
-      const { rawText, speechText, langCode } = await aiService.askQuestion(question, userName);
+      const sessionId = interaction.channelId || interaction.guildId || 'default';
+
+      // 1. Generate concise, voice-tailored answer from Gemini addressing the user with memory
+      const { rawText, speechText, langCode, memoryTurns } = await aiService.askQuestion(
+        question,
+        userName,
+        sessionId
+      );
 
       // 2. Resolve language-specific neural voice (Malay: Yasmin / English: Guy)
       const selectedVoice = voiceManager.ttsService.resolveVoice(
@@ -90,6 +96,7 @@ module.exports = {
 
       // 5. Display the response embed in text chat
       const isMusicPlaying = guildState?.currentTrack?.type === 'song';
+      const memoryStatus = memoryTurns > 1 ? ` • 🧠 ${memoryTurns} turns` : '';
       const embed = new EmbedBuilder()
         .setColor(0x5865f2)
         .setTitle('🎙️ Voice AI Answer')
@@ -99,7 +106,7 @@ module.exports = {
           { name: '💬 Spoken Answer', value: rawText.slice(0, 1024) }
         )
         .setFooter({
-          text: `🔊 #${channelName} • Voice: ${voiceLabel}${isMusicPlaying ? ' • Music ducked' : ''} • kh.AI by Khairin`,
+          text: `🔊 #${channelName} • Voice: ${voiceLabel}${isMusicPlaying ? ' • Music ducked' : ''}${memoryStatus} • kh.AI by Khairin`,
         })
         .setTimestamp();
 
