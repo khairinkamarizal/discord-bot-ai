@@ -97,21 +97,21 @@ client.once(Events.ClientReady, async (readyClient) => {
     console.error('Error during voice auto-restore:', err);
   }
 
-  // Register slash commands automatically
+  // Register slash commands automatically (Global sync, clear guild duplicates)
   try {
-    // 1. Instant registration for all current guilds (bypasses Discord's 1-hour global cache delay)
+    // 1. Clear any guild-specific command registrations so Discord doesn't show duplicates
     for (const [id, guild] of readyClient.guilds.cache) {
       try {
-        await guild.commands.set(slashCommandsData);
-        console.log(`⚡ Instant slash commands registered for server: ${guild.name} (${id})`);
+        await guild.commands.set([]);
+        console.log(`🧹 Cleaned guild-specific commands for ${guild.name} (${id})`);
       } catch (err) {
-        console.warn(`Could not register instant commands for guild ${guild.name}:`, err.message);
+        console.warn(`Could not clear guild commands for ${guild.name}:`, err.message);
       }
     }
 
-    // 2. Global registration for cross-server caching
+    // 2. Register clean global slash commands
     await readyClient.application.commands.set(slashCommandsData);
-    console.log('✅ Global slash commands synced successfully!');
+    console.log('✅ Global slash commands synced successfully (no duplicates)!');
   } catch (error) {
     console.error('❌ Error registering slash commands:', error);
   }
