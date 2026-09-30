@@ -22,10 +22,10 @@ module.exports = {
     const title = skipped.title || (skipped.type === 'tts' ? 'Voice Speech' : 'Current track');
     const embed = new EmbedBuilder()
       .setColor(0x111111)
-      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setAuthor({ name: 'kh.AI Audio' })
       .setTitle('TRACK SKIPPED')
       .setDescription(`Skipped: **${title}**`)
-      .setFooter({ text: 'kh.ai studio' })
+      .setFooter({ text: 'kh.ai audio' })
       .setTimestamp();
 
     return interaction.reply({ embeds: [embed] });

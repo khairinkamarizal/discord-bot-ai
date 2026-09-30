@@ -105,7 +105,7 @@ module.exports = {
 
       const embed = new EmbedBuilder()
         .setColor(0x111111)
-        .setAuthor({ name: 'KH.AI STUDIO' })
+        .setAuthor({ name: 'kh.AI Voice' })
         .setTitle(isSpeakingNow ? 'VOICE DIALOGUE' : 'VOICE QUEUED')
         .addFields(
           { name: 'USER', value: `<@${interaction.user.id}>`, inline: true },
@@ -118,7 +118,7 @@ module.exports = {
           { name: 'RESPONSE', value: rawText.slice(0, 1024) }
         )
         .setFooter({
-          text: `#${channelName} • ${voiceLabel}${isMusicPlaying ? ' • ducked' : ''}${memoryTurns > 1 ? ` • ${memoryTurns} turns` : ''} • kh.ai studio`,
+          text: `#${channelName} • ${voiceLabel}${isMusicPlaying ? ' • ducked' : ''}${memoryTurns > 1 ? ` • ${memoryTurns} turns` : ''} • kh.ai voice`,
         })
         .setTimestamp();
 

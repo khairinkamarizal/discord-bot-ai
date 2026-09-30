@@ -53,7 +53,7 @@ module.exports = {
 
       const embed = new EmbedBuilder()
         .setColor(0x111111)
-        .setAuthor({ name: 'KH.AI STUDIO' })
+        .setAuthor({ name: 'kh.AI Studio' })
         .setTitle('VISUAL SYNTHESIS')
         .setDescription(`"${prompt}"`)
         .setImage('attachment://imagine.png')

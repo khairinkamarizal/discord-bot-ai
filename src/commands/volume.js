@@ -44,14 +44,14 @@ module.exports = {
       const vols = voiceManager.getVolumes(interaction.guildId);
       const embed = new EmbedBuilder()
         .setColor(0x111111)
-        .setAuthor({ name: 'KH.AI STUDIO' })
+        .setAuthor({ name: 'kh.AI Audio' })
         .setTitle('AUDIO LEVELS')
         .addFields(
           { name: 'MUSIC', value: `${vols.music}%`, inline: true },
           { name: 'VOICE', value: `${vols.voice}%`, inline: true }
         )
         .setFooter({
-          text: 'Use /volume level: <1-100> [channel] • kh.ai studio',
+          text: 'Use /volume level: <1-100> [channel] • kh.ai audio',
         })
         .setTimestamp();
 
@@ -63,14 +63,14 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(0x111111)
-      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setAuthor({ name: 'kh.AI Audio' })
       .setTitle('LEVEL ADJUSTED')
       .setDescription(`Channel **${channel.toUpperCase()}** set to **${level}%**.`)
       .addFields(
         { name: 'MUSIC', value: `${updated.music}%`, inline: true },
         { name: 'VOICE', value: `${updated.voice}%`, inline: true }
       )
-      .setFooter({ text: 'Real-time output adjustment • kh.ai studio' })
+      .setFooter({ text: 'Real-time output adjustment • kh.ai audio' })
       .setTimestamp();
 
     return interaction.reply({ embeds: [embed] });

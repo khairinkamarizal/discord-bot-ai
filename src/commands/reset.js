@@ -15,14 +15,14 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(0x111111)
-      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setAuthor({ name: 'kh.AI System' })
       .setTitle('SESSION RESET')
       .setDescription(
         hadMemory
           ? 'Conversational memory cleared for this channel.'
           : 'No active conversational context to clear.'
       )
-      .setFooter({ text: 'kh.ai studio' })
+      .setFooter({ text: 'kh.ai system' })
       .setTimestamp();
 
     return interaction.reply({ embeds: [embed] });

@@ -105,7 +105,7 @@ module.exports = {
 
       const embed = new EmbedBuilder()
         .setColor(0x111111)
-        .setAuthor({ name: 'KH.AI STUDIO' })
+        .setAuthor({ name: 'kh.AI Voice' })
         .setTitle(isSpeakingNow ? 'VOCAL SYNTHESIS' : 'VOCAL SYNTHESIS QUEUED')
         .addFields(
           { name: 'SPEAKER', value: `<@${interaction.user.id}>`, inline: true },
@@ -117,7 +117,7 @@ module.exports = {
           { name: 'TRANSCRIPT', value: cleanText.slice(0, 1024) }
         )
         .setFooter({
-          text: `#${channelName} • ${voiceLabel}${isMusicPlaying ? ' • ducked' : ''} • kh.ai studio`,
+          text: `#${channelName} • ${voiceLabel}${isMusicPlaying ? ' • ducked' : ''} • kh.ai voice`,
         })
         .setTimestamp();
 

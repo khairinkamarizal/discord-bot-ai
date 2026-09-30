@@ -88,7 +88,7 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(0x111111)
-      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setAuthor({ name: 'kh.AI Audio' })
       .setTitle('RADIO BROADCAST')
       .setDescription(`Streaming **${station.name}** in **#${channelName}**`)
       .addFields(
@@ -97,7 +97,7 @@ module.exports = {
         { name: 'CONTROLS', value: 'Use /volume to adjust levels, or /stop to terminate broadcast.' }
       )
       .setFooter({
-        text: 'kh.ai studio',
+        text: 'kh.ai audio',
       })
       .setTimestamp();
 

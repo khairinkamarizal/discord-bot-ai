@@ -11,7 +11,7 @@ module.exports = {
   async execute(interaction) {
     const embed = new EmbedBuilder()
       .setColor(0x111111)
-      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setAuthor({ name: 'kh.AI Help' })
       .setTitle('COMMAND DIRECTORY')
       .setDescription(
         'Comprehensive index of controls for voice dialogue, streaming audio, and image synthesis.'
@@ -46,7 +46,7 @@ module.exports = {
         }
       )
       .setFooter({
-        text: 'kh.ai studio',
+        text: 'kh.ai help',
       })
       .setTimestamp();
 

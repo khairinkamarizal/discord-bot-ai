@@ -67,7 +67,7 @@ module.exports = {
 
         const embed = new EmbedBuilder()
           .setColor(0x111111)
-          .setAuthor({ name: 'KH.AI STUDIO' })
+          .setAuthor({ name: 'kh.AI Audio' })
           .setTitle('PLAYLIST ENQUEUED')
           .setDescription(`[**${searchResult.playlist.title}**](${searchResult.playlist.url})`)
           .addFields(
@@ -90,7 +90,7 @@ module.exports = {
             }
           )
           .setFooter({
-            text: `Requested by ${interaction.user.username} • kh.ai studio`,
+            text: `Requested by ${interaction.user.username} • kh.ai audio`,
           })
           .setTimestamp();
 
@@ -107,7 +107,7 @@ module.exports = {
 
       const embed = new EmbedBuilder()
         .setColor(0x111111)
-        .setAuthor({ name: 'KH.AI STUDIO' })
+        .setAuthor({ name: 'kh.AI Audio' })
         .setTitle(result.isPlayingNow ? 'NOW PLAYING' : 'TRACK ENQUEUED')
         .setDescription(`[**${song.title}**](${song.url})`)
         .addFields(
@@ -120,7 +120,7 @@ module.exports = {
           }
         )
         .setFooter({
-          text: `Requested by ${interaction.user.username} • kh.ai studio`,
+          text: `Requested by ${interaction.user.username} • kh.ai audio`,
         })
         .setTimestamp();
 

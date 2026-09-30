@@ -21,10 +21,10 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(0x111111)
-      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setAuthor({ name: 'kh.AI Audio' })
       .setTitle('PLAYBACK PAUSED')
       .setDescription('Audio playback suspended. Use `/resume` to continue.')
-      .setFooter({ text: 'kh.ai studio' })
+      .setFooter({ text: 'kh.ai audio' })
       .setTimestamp();
 
     return interaction.reply({ embeds: [embed] });

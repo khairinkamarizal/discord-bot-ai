@@ -38,7 +38,7 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(0x111111)
-      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setAuthor({ name: 'kh.AI Audio' })
       .setTitle('QUEUE DIRECTORY')
       .setTimestamp();
 
@@ -94,7 +94,7 @@ module.exports = {
       embed.addFields({ name: 'AUDIO TRACKS', value: 'No tracks remaining in queue.' });
     }
 
-    embed.setFooter({ text: `#${channelName} • kh.ai studio` });
+    embed.setFooter({ text: `#${channelName} • kh.ai audio` });
 
     return interaction.reply({ embeds: [embed] });
   },
