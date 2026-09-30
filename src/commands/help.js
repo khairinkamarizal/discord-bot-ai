@@ -22,7 +22,7 @@ module.exports = {
           value:
             '`/ask <question> [voice]`\nInquire aloud in the voice channel with natural dialogue.\n\n' +
             '`/say <text> [voice]`\nRender custom text into speech in your voice channel.\n\n' +
-            '`/imagine <prompt>`\nSynthesize visuals from conceptual descriptions.\n\n' +
+            '`/imagine <prompt> [reference]`\nSynthesize visuals from text or transform reference images.\n\n' +
             '`/roastmode <on|off>`\nToggle ambient voice greetings upon channel entry.\n\n' +
             '`/reset`\nClear conversational context for the current session.\n\n' +
             '`@kh.AI <message>`\nEngage directly in any text channel.',

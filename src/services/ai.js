@@ -304,11 +304,12 @@ Language & Speech Rules:
   }
 
   /**
-   * Generates an image using Gemini (Nano Banana - gemini-2.5-flash-image)
+   * Generates or transforms an image using Gemini (Nano Banana - gemini-2.5-flash-image)
    * @param {string} prompt - The prompt describing the desired image
+   * @param {{ buffer: Buffer, mimeType: string }|null} [referenceImage] - Optional reference image
    * @returns {Promise<{ buffer: Buffer, mimeType: string, text: string|null }>}
    */
-  async generateImage(prompt) {
+  async generateImage(prompt, referenceImage = null) {
     const isVertexAI =
       process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true' ||
       !!process.env.GCP_PROJECT_ID ||
@@ -321,9 +322,30 @@ Language & Speech Rules:
     }
 
     try {
+      let contents;
+      if (referenceImage && referenceImage.buffer) {
+        const base64Data = referenceImage.buffer.toString('base64');
+        contents = [
+          {
+            role: 'user',
+            parts: [
+              {
+                inlineData: {
+                  mimeType: referenceImage.mimeType || 'image/png',
+                  data: base64Data,
+                },
+              },
+              { text: prompt },
+            ],
+          },
+        ];
+      } else {
+        contents = prompt;
+      }
+
       const response = await this.ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
-        contents: prompt,
+        contents,
         config: {
           safetySettings: [
             { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
