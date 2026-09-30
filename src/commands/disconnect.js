@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -16,12 +16,18 @@ module.exports = {
 
     if (!disconnected) {
       return interaction.editReply({
-        content: '❌ I am not currently connected to any voice channel in this server.',
+        content: 'I am not currently connected to any voice channel in this server.',
       });
     }
 
-    return interaction.editReply({
-      content: '👋 Disconnected from the voice channel. See you next time!',
-    });
+    const embed = new EmbedBuilder()
+      .setColor(0x111111)
+      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setTitle('VOICE DISCONNECT')
+      .setDescription('Disconnected from the voice channel and released session.')
+      .setFooter({ text: 'kh.ai studio' })
+      .setTimestamp();
+
+    return interaction.editReply({ embeds: [embed] });
   },
 };

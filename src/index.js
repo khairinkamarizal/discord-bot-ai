@@ -147,7 +147,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     console.error(`Error executing /${interaction.commandName}:`, error);
 
     const errorMessage = {
-      content: '❌ There was an error while executing this command!',
+      content: 'An error occurred while executing this command.',
       ephemeral: true,
     };
 

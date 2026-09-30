@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -14,13 +14,19 @@ module.exports = {
 
     if (!resumed) {
       return interaction.reply({
-        content: '❌ Playback is not paused.',
+        content: 'Playback is not currently paused.',
         ephemeral: true,
       });
     }
 
-    return interaction.reply({
-      content: '▶️ Resumed playback.',
-    });
+    const embed = new EmbedBuilder()
+      .setColor(0x111111)
+      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setTitle('PLAYBACK RESUMED')
+      .setDescription('Audio playback resumed.')
+      .setFooter({ text: 'kh.ai studio' })
+      .setTimestamp();
+
+    return interaction.reply({ embeds: [embed] });
   },
 };

@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -14,13 +14,19 @@ module.exports = {
 
     if (!paused) {
       return interaction.reply({
-        content: '❌ Nothing is currently playing or already paused.',
+        content: 'Nothing is currently playing or already paused.',
         ephemeral: true,
       });
     }
 
-    return interaction.reply({
-      content: '⏸️ Paused playback. Use `/resume` to continue.',
-    });
+    const embed = new EmbedBuilder()
+      .setColor(0x111111)
+      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setTitle('PLAYBACK PAUSED')
+      .setDescription('Audio playback suspended. Use `/resume` to continue.')
+      .setFooter({ text: 'kh.ai studio' })
+      .setTimestamp();
+
+    return interaction.reply({ embeds: [embed] });
   },
 };

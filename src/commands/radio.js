@@ -33,10 +33,10 @@ module.exports = {
         .setDescription('Select a 24/7 radio station')
         .setRequired(true)
         .addChoices(
-          { name: '☕ 24/7 Lofi Hip Hop (Study & Chill)', value: 'lofi' },
-          { name: '🌆 24/7 Synthwave & Vaporwave (Nightwave Plaza)', value: 'synthwave' },
-          { name: '🍃 24/7 Ambient Chill (Groove Salad)', value: 'chill' },
-          { name: '🎷 24/7 Coffee Shop Jazz Cafe', value: 'cafe' }
+          { name: '24/7 Lofi Hip Hop (Study & Chill)', value: 'lofi' },
+          { name: '24/7 Synthwave & Vaporwave (Nightwave Plaza)', value: 'synthwave' },
+          { name: '24/7 Ambient Chill (Groove Salad)', value: 'chill' },
+          { name: '24/7 Coffee Shop Jazz Cafe', value: 'cafe' }
         )
     ),
 
@@ -63,7 +63,7 @@ module.exports = {
 
     if (!isConnected) {
       return interaction.editReply({
-        content: '❌ Please join a voice channel first before starting the radio!',
+        content: 'Please join a voice channel first before starting the radio.',
       });
     }
 
@@ -87,16 +87,17 @@ module.exports = {
     const channelName = guildState?.channelName || 'voice';
 
     const embed = new EmbedBuilder()
-      .setColor(0x5865f2)
-      .setTitle('📻 24/7 Live Radio Started')
-      .setDescription(`Now streaming **${station.name}** live in **#${channelName}**!`)
+      .setColor(0x111111)
+      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setTitle('RADIO BROADCAST')
+      .setDescription(`Streaming **${station.name}** in **#${channelName}**`)
       .addFields(
-        { name: '🎵 Station Genre', value: station.genre, inline: true },
-        { name: '🔊 Default Volume', value: `${Math.round((guildState?.volume ?? 0.20) * 100)}%`, inline: true },
-        { name: '💡 Tip', value: 'Use `/volume` to adjust volume, or `/stop` to stop the radio.' }
+        { name: 'GENRE', value: station.genre, inline: true },
+        { name: 'OUTPUT LEVEL', value: `${Math.round((guildState?.volume ?? 0.20) * 100)}%`, inline: true },
+        { name: 'CONTROLS', value: 'Use /volume to adjust levels, or /stop to terminate broadcast.' }
       )
       .setFooter({
-        text: 'kh.AI • 24/7 Radio Stream with Real-time DJ Ducking',
+        text: 'kh.ai studio',
       })
       .setTimestamp();
 

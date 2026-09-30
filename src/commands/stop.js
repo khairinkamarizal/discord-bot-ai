@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -7,20 +7,26 @@ module.exports = {
 
   /**
    * @param {import('discord.js').ChatInputCommandInteraction} interaction
-   * @param {import('../voice/player').VoiceManager} voiceManager
+   * @param {{ voiceManager: import('../voice/player').VoiceManager }} services
    */
   async execute(interaction, { voiceManager }) {
     const stopped = voiceManager.stop(interaction.guildId);
 
     if (!stopped) {
       return interaction.reply({
-        content: '❌ No audio is currently playing in this server.',
+        content: 'No audio is currently playing in this server.',
         ephemeral: true,
       });
     }
 
-    return interaction.reply({
-      content: '⏹️ Stopped playback and cleared the voice queue.',
-    });
+    const embed = new EmbedBuilder()
+      .setColor(0x111111)
+      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setTitle('PLAYBACK TERMINATED')
+      .setDescription('Stopped playback and cleared the audio queue.')
+      .setFooter({ text: 'kh.ai studio' })
+      .setTimestamp();
+
+    return interaction.reply({ embeds: [embed] });
   },
 };

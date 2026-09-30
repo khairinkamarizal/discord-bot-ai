@@ -18,9 +18,9 @@ module.exports = {
         .setDescription('Which audio channel to adjust (default: All / Master)')
         .setRequired(false)
         .addChoices(
-          { name: '🎵 Music (Songs & 24/7 Radio)', value: 'music' },
-          { name: '🗣️ Voice & Speech (/say, /ask, Entrances)', value: 'voice' },
-          { name: '🔊 All / Master (Both Music & Voice)', value: 'all' }
+          { name: 'Music (Songs & Radio)', value: 'music' },
+          { name: 'Voice (Speech & Dialogue)', value: 'voice' },
+          { name: 'All / Master Output', value: 'all' }
         )
     ),
 
@@ -31,7 +31,7 @@ module.exports = {
   async execute(interaction, { voiceManager }) {
     if (!voiceManager.isConnected(interaction.guildId)) {
       return interaction.reply({
-        content: '❌ I am not connected to a voice channel in this server.',
+        content: 'I am not connected to a voice channel in this server.',
         ephemeral: true,
       });
     }
@@ -43,14 +43,15 @@ module.exports = {
     if (level === null) {
       const vols = voiceManager.getVolumes(interaction.guildId);
       const embed = new EmbedBuilder()
-        .setColor(0x5865f2)
-        .setTitle('🔊 Current Audio Volume Levels')
+        .setColor(0x111111)
+        .setAuthor({ name: 'KH.AI STUDIO' })
+        .setTitle('AUDIO LEVELS')
         .addFields(
-          { name: '🎵 Music Volume', value: `**${vols.music}%**`, inline: true },
-          { name: '🗣️ Voice & Speech Volume', value: `**${vols.voice}%**`, inline: true }
+          { name: 'MUSIC', value: `${vols.music}%`, inline: true },
+          { name: 'VOICE', value: `${vols.voice}%`, inline: true }
         )
         .setFooter({
-          text: 'To adjust, run: /volume level: <1-100> [channel: Music / Voice / All]',
+          text: 'Use /volume level: <1-100> [channel] • kh.ai studio',
         })
         .setTimestamp();
 
@@ -60,19 +61,16 @@ module.exports = {
     // Set new volume for selected channel or both
     const updated = voiceManager.setVolume(interaction.guildId, level / 100, channel);
 
-    let channelLabel = '🔊 All / Master (Music & Voice)';
-    if (channel === 'music') channelLabel = '🎵 Music (Songs & Radio)';
-    else if (channel === 'voice') channelLabel = '🗣️ Voice & Speech (/say, /ask, Entrances)';
-
     const embed = new EmbedBuilder()
-      .setColor(0x5865f2)
-      .setTitle(`🔊 Volume Adjusted: ${channelLabel}`)
-      .setDescription(`Target level set to **${level}%**.`)
+      .setColor(0x111111)
+      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setTitle('LEVEL ADJUSTED')
+      .setDescription(`Channel **${channel.toUpperCase()}** set to **${level}%**.`)
       .addFields(
-        { name: '🎵 Music Volume', value: `**${updated.music}%**`, inline: true },
-        { name: '🗣️ Voice & Speech Volume', value: `**${updated.voice}%**`, inline: true }
+        { name: 'MUSIC', value: `${updated.music}%`, inline: true },
+        { name: 'VOICE', value: `${updated.voice}%`, inline: true }
       )
-      .setFooter({ text: 'Changes apply in real-time to active and upcoming playback' })
+      .setFooter({ text: 'Real-time output adjustment • kh.ai studio' })
       .setTimestamp();
 
     return interaction.reply({ embeds: [embed] });

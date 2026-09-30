@@ -17,7 +17,7 @@ module.exports = {
 
     if (!queueData || (!hasMusic && !hasSpeech)) {
       return interaction.reply({
-        content: '📭 The voice queue is currently empty.',
+        content: 'The voice queue is currently empty.',
         ephemeral: true,
       });
     }
@@ -37,43 +37,44 @@ module.exports = {
     const currentDuration = currentItem?.duration ? ` [${currentItem.duration}]` : '';
 
     const embed = new EmbedBuilder()
-      .setColor(0x5865f2)
-      .setTitle(`🎵 Voice & Audio Queue - #${channelName}`)
+      .setColor(0x111111)
+      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setTitle('QUEUE DIRECTORY')
       .setTimestamp();
 
     if (currentItem) {
       embed.setDescription(
-        `**Now Playing (Music):**\n${isPaused ? '⏸️ (Paused) ' : '▶️ '}**${currentTitle}**${currentArtist}${currentDuration}`
+        `**Current Track**\n${isPaused ? '[Paused] ' : ''}**${currentTitle}**${currentArtist}${currentDuration}`
       );
     } else if (currentSpeech) {
       const speechLabel = currentSpeech.text ? `"${currentSpeech.text.slice(0, 100)}..."` : 'Sound Effect';
-      embed.setDescription(`🗣️ **Now Speaking:** ${speechLabel}`);
+      embed.setDescription(`**Active Speech**\n${speechLabel}`);
     } else {
-      embed.setDescription('Idle / No audio actively playing.');
+      embed.setDescription('Idle. No audio actively playing.');
     }
 
     // Speech Queue section
     if (currentSpeech || (speechQueue && speechQueue.length > 0)) {
       let speechList = '';
       if (currentSpeech) {
-        const who = currentSpeech.userName ? ` *(by ${currentSpeech.userName})*` : '';
+        const who = currentSpeech.userName ? ` (${currentSpeech.userName})` : '';
         const what = currentSpeech.text ? `"${currentSpeech.text.slice(0, 80)}"` : 'Sound effect';
-        speechList += `🔊 **Speaking:** ${what}${who}\n`;
+        speechList += `Active: ${what}${who}\n`;
       }
       if (speechQueue && speechQueue.length > 0) {
         speechList += speechQueue
           .slice(0, 5)
           .map((s, idx) => {
-            const who = s.userName ? ` *(by ${s.userName})*` : '';
+            const who = s.userName ? ` (${s.userName})` : '';
             const what = s.text ? `"${s.text.slice(0, 60)}..."` : 'Sound effect';
             return `\`${idx + 1}.\` ${what}${who}`;
           })
           .join('\n');
         if (speechQueue.length > 5) {
-          speechList += `\n*...and ${speechQueue.length - 5} more queued speech messages*`;
+          speechList += `\n*...and ${speechQueue.length - 5} more queued messages*`;
         }
       }
-      embed.addFields({ name: '🗣️ Speech Queue', value: speechList });
+      embed.addFields({ name: 'SPEECH QUEUE', value: speechList });
     }
 
     // Music Queue section
@@ -88,10 +89,12 @@ module.exports = {
         .join('\n');
 
       const remaining = queue.length > 8 ? `\n*...and ${queue.length - 8} more tracks*` : '';
-      embed.addFields({ name: '🎵 Upcoming Music Tracks', value: upcomingList + remaining });
+      embed.addFields({ name: 'AUDIO TRACKS', value: upcomingList + remaining });
     } else if (hasMusic) {
-      embed.addFields({ name: '🎵 Upcoming Music Tracks', value: 'No more tracks queued.' });
+      embed.addFields({ name: 'AUDIO TRACKS', value: 'No tracks remaining in queue.' });
     }
+
+    embed.setFooter({ text: `#${channelName} • kh.ai studio` });
 
     return interaction.reply({ embeds: [embed] });
   },

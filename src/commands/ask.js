@@ -54,7 +54,7 @@ module.exports = {
     if (!isConnected) {
       return interaction.editReply({
         content:
-          '❌ I am not connected to a voice channel. Please join a voice channel and run `/join` first, or be inside a voice channel when using `/ask`.',
+          'Not connected to a voice channel. Please join a voice channel and run `/join` first, or be inside a voice channel when using `/ask`.',
       });
     }
 
@@ -102,23 +102,23 @@ module.exports = {
       const isMusicPlaying = guildState?.currentTrack?.type === 'song';
       const isSpeakingNow = speakResult?.isSpeakingNow;
       const queuePos = speakResult?.queuePosition || 1;
-      const memoryStatus = memoryTurns > 1 ? ` • 🧠 ${memoryTurns} turns` : '';
 
       const embed = new EmbedBuilder()
-        .setColor(isSpeakingNow ? 0x5865f2 : 0xfaa61a)
-        .setTitle(isSpeakingNow ? '🎙️ kh.AI Voice Response' : '⏳ kh.AI Voice Response Queued')
+        .setColor(0x111111)
+        .setAuthor({ name: 'KH.AI STUDIO' })
+        .setTitle(isSpeakingNow ? 'VOICE DIALOGUE' : 'VOICE QUEUED')
         .addFields(
-          { name: '👤 User', value: `<@${interaction.user.id}>`, inline: true },
+          { name: 'USER', value: `<@${interaction.user.id}>`, inline: true },
           {
-            name: '📊 Status',
-            value: isSpeakingNow ? '🔊 Speaking Now' : `⏳ Queued (Position #${queuePos})`,
+            name: 'STATUS',
+            value: isSpeakingNow ? 'Active' : `Queued (#${queuePos})`,
             inline: true,
           },
-          { name: '❓ Question', value: question.slice(0, 1024) },
-          { name: '💬 Spoken Answer', value: rawText.slice(0, 1024) }
+          { name: 'PROMPT', value: question.slice(0, 1024) },
+          { name: 'RESPONSE', value: rawText.slice(0, 1024) }
         )
         .setFooter({
-          text: `🔊 #${channelName} • Voice: ${voiceLabel}${isMusicPlaying ? ' • Music ducked' : ''}${memoryStatus} • kh.AI by Khairin`,
+          text: `#${channelName} • ${voiceLabel}${isMusicPlaying ? ' • ducked' : ''}${memoryTurns > 1 ? ` • ${memoryTurns} turns` : ''} • kh.ai studio`,
         })
         .setTimestamp();
 
@@ -126,7 +126,7 @@ module.exports = {
     } catch (error) {
       console.error('Error handling /ask question:', error);
       return interaction.editReply({
-        content: `❌ An error occurred while generating the answer: ${error.message || 'Unknown error'}`,
+        content: `An error occurred while generating the answer: ${error.message || 'Unknown error'}`,
       });
     }
   },

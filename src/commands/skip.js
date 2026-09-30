@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -14,14 +14,20 @@ module.exports = {
 
     if (!skipped) {
       return interaction.reply({
-        content: '❌ Nothing is currently playing to skip.',
+        content: 'Nothing is currently playing to skip.',
         ephemeral: true,
       });
     }
 
-    const title = skipped.title || (skipped.type === 'tts' ? 'AI Voice Response' : 'Current track');
-    return interaction.reply({
-      content: `⏭️ Skipped: **${title}**`,
-    });
+    const title = skipped.title || (skipped.type === 'tts' ? 'Voice Speech' : 'Current track');
+    const embed = new EmbedBuilder()
+      .setColor(0x111111)
+      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setTitle('TRACK SKIPPED')
+      .setDescription(`Skipped: **${title}**`)
+      .setFooter({ text: 'kh.ai studio' })
+      .setTimestamp();
+
+    return interaction.reply({ embeds: [embed] });
   },
 };

@@ -25,15 +25,16 @@ module.exports = {
       const attachment = new AttachmentBuilder(buffer, { name: 'imagine.png' });
 
       const embed = new EmbedBuilder()
-        .setColor(0x1a1a1a)
+        .setColor(0x111111)
         .setAuthor({ name: 'KH.AI STUDIO' })
+        .setTitle('VISUAL SYNTHESIS')
         .setDescription(`"${prompt}"`)
         .setImage('attachment://imagine.png')
         .setFooter({ text: 'kh.ai studio' })
         .setTimestamp();
 
       if (text && text.length > 0 && !text.toLowerCase().includes("here's that image")) {
-        embed.addFields({ name: 'Notes', value: text });
+        embed.addFields({ name: 'NOTES', value: text });
       }
 
       return await interaction.editReply({

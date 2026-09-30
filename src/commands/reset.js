@@ -14,14 +14,15 @@ module.exports = {
     const hadMemory = aiService.clearMemory(sessionId);
 
     const embed = new EmbedBuilder()
-      .setColor(hadMemory ? 0x57f287 : 0xfee75c)
-      .setTitle('🧠 AI Conversation Memory Reset')
+      .setColor(0x111111)
+      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setTitle('SESSION RESET')
       .setDescription(
         hadMemory
-          ? 'Memory cleared! kh.AI has forgotten prior topics in this channel and is ready for a fresh conversation.'
-          : 'Memory is already empty for this channel.'
+          ? 'Conversational memory cleared for this channel.'
+          : 'No active conversational context to clear.'
       )
-      .setFooter({ text: 'kh.AI by Khairin' })
+      .setFooter({ text: 'kh.ai studio' })
       .setTimestamp();
 
     return interaction.reply({ embeds: [embed] });

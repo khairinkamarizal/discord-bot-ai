@@ -55,7 +55,7 @@ module.exports = {
     if (!isConnected) {
       return interaction.editReply({
         content:
-          '❌ I am not connected to a voice channel. Please join a voice channel and run `/join` first, or be inside a voice channel when using `/say`.',
+          'Not connected to a voice channel. Please join a voice channel and run `/join` first, or be inside a voice channel when using `/say`.',
       });
     }
 
@@ -63,7 +63,7 @@ module.exports = {
 
     if (!cleanText) {
       return interaction.editReply({
-        content: '❌ Please provide valid text for me to speak.',
+        content: 'Please provide valid text for speech.',
       });
     }
 
@@ -104,19 +104,20 @@ module.exports = {
       const queuePos = speakResult?.queuePosition || 1;
 
       const embed = new EmbedBuilder()
-        .setColor(isSpeakingNow ? 0x5865f2 : 0xfaa61a)
-        .setTitle(isSpeakingNow ? '🗣️ kh.AI Speaking Aloud' : '⏳ kh.AI Speech Queued')
+        .setColor(0x111111)
+        .setAuthor({ name: 'KH.AI STUDIO' })
+        .setTitle(isSpeakingNow ? 'VOCAL SYNTHESIS' : 'VOCAL SYNTHESIS QUEUED')
         .addFields(
-          { name: '👤 Spoken by', value: `<@${interaction.user.id}>`, inline: true },
+          { name: 'SPEAKER', value: `<@${interaction.user.id}>`, inline: true },
           {
-            name: '📊 Status',
-            value: isSpeakingNow ? '🔊 Speaking Now' : `⏳ Queued (Position #${queuePos})`,
+            name: 'STATUS',
+            value: isSpeakingNow ? 'Active' : `Queued (#${queuePos})`,
             inline: true,
           },
-          { name: '💬 Message Spoken', value: cleanText.slice(0, 1024) }
+          { name: 'TRANSCRIPT', value: cleanText.slice(0, 1024) }
         )
         .setFooter({
-          text: `🔊 #${channelName} • Voice: ${voiceLabel}${isMusicPlaying ? ' • Music ducked' : ''} • kh.AI by Khairin`,
+          text: `#${channelName} • ${voiceLabel}${isMusicPlaying ? ' • ducked' : ''} • kh.ai studio`,
         })
         .setTimestamp();
 
@@ -124,7 +125,7 @@ module.exports = {
     } catch (error) {
       console.error('Error handling /say:', error);
       return interaction.editReply({
-        content: `❌ An error occurred while speaking: ${error.message || 'Unknown error'}`,
+        content: `An error occurred while speaking: ${error.message || 'Unknown error'}`,
       });
     }
   },

@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -10,8 +10,8 @@ module.exports = {
         .setDescription('Turn auto-roast ON or OFF')
         .setRequired(true)
         .addChoices(
-          { name: '🔥 ON (Auto-roast members & welcome Khai)', value: 'on' },
-          { name: '🤫 OFF (Quiet mode, no entrance greetings)', value: 'off' }
+          { name: 'ON (Active entrance greetings)', value: 'on' },
+          { name: 'OFF (Quiet mode)', value: 'off' }
         )
     ),
 
@@ -23,10 +23,18 @@ module.exports = {
     const status = interaction.options.getString('status') === 'on';
     voiceManager.setRoastMode(status);
 
-    return interaction.reply({
-      content: status
-        ? '🔥 **Roast Mode is now ON!** kh.AI will greet Big Boss Khai with fanfare and savagely roast anyone else joining voice!'
-        : '🤫 **Roast Mode is now OFF.** kh.AI will keep quiet when people join the voice channel.',
-    });
+    const embed = new EmbedBuilder()
+      .setColor(0x111111)
+      .setAuthor({ name: 'KH.AI STUDIO' })
+      .setTitle('ROAST MODE')
+      .setDescription(
+        status
+          ? 'Entrance greetings enabled. Ambient welcoming active.'
+          : 'Quiet mode active. Entrance greetings disabled.'
+      )
+      .setFooter({ text: 'kh.ai studio' })
+      .setTimestamp();
+
+    return interaction.reply({ embeds: [embed] });
   },
 };

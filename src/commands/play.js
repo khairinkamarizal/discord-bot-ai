@@ -21,7 +21,7 @@ module.exports = {
 
     if (!userChannel) {
       return interaction.reply({
-        content: '❌ You need to be in a voice channel first to play music!',
+        content: 'You need to be in a voice channel first to play music.',
         ephemeral: true,
       });
     }
@@ -32,12 +32,12 @@ module.exports = {
     const permissions = userChannel.permissionsFor(interaction.client.user);
     if (permissions && !permissions.has(PermissionFlagsBits.Connect)) {
       return interaction.editReply({
-        content: '❌ I do not have permission to **Connect** to this voice channel! Please check channel permissions.',
+        content: 'I do not have permission to Connect to this voice channel. Please check channel permissions.',
       });
     }
     if (permissions && !permissions.has(PermissionFlagsBits.Speak)) {
       return interaction.editReply({
-        content: '❌ I do not have permission to **Speak** in this voice channel! Please check channel permissions.',
+        content: 'I do not have permission to Speak in this voice channel. Please check channel permissions.',
       });
     }
 
@@ -47,7 +47,7 @@ module.exports = {
     } catch (err) {
       console.error('Failed to join voice channel for /play:', err);
       return interaction.editReply({
-        content: `❌ Could not connect to your voice channel: ${err.message || 'Connection timed out'}. Please check bot permissions.`,
+        content: `Could not connect to your voice channel: ${err.message || 'Connection timed out'}.`,
       });
     }
 
@@ -57,7 +57,7 @@ module.exports = {
 
       if (!searchResult) {
         return interaction.editReply({
-          content: `❌ No results found for: **${query}**`,
+          content: `No results found for: **${query}**`,
         });
       }
 
@@ -66,31 +66,31 @@ module.exports = {
         const result = await voiceManager.playPlaylist(interaction.guildId, searchResult.tracks);
 
         const embed = new EmbedBuilder()
-          .setColor(0x1db954)
-          .setTitle('📋 Playlist Added to Queue')
+          .setColor(0x111111)
+          .setAuthor({ name: 'KH.AI STUDIO' })
+          .setTitle('PLAYLIST ENQUEUED')
           .setDescription(`[**${searchResult.playlist.title}**](${searchResult.playlist.url})`)
           .addFields(
             {
-              name: '🎵 Total Tracks',
-              value: `${searchResult.playlist.trackCount} songs`,
+              name: 'TRACKS',
+              value: `${searchResult.playlist.trackCount} tracks`,
               inline: true,
             },
             {
-              name: '👤 Creator',
+              name: 'CREATOR',
               value: searchResult.playlist.author || 'Various Artists',
               inline: true,
             },
             {
-              name: '📊 Queue Status',
+              name: 'STATUS',
               value: result.isPlayingNow
-                ? `▶️ Playing now: **${result.firstTrack.title}**`
-                : `Queued at position #${result.queuePosition}`,
+                ? `Now playing: ${result.firstTrack.title}`
+                : `Position #${result.queuePosition}`,
               inline: true,
             }
           )
           .setFooter({
-            text: `Requested by ${interaction.user.tag} • Plays until /disconnect`,
-            iconURL: interaction.user.displayAvatarURL(),
+            text: `Requested by ${interaction.user.username} • kh.ai studio`,
           })
           .setTimestamp();
 
@@ -106,21 +106,21 @@ module.exports = {
       const result = await voiceManager.playSong(interaction.guildId, song);
 
       const embed = new EmbedBuilder()
-        .setColor(0x1db954)
-        .setTitle(result.isPlayingNow ? '▶️ Now Playing' : '🎵 Added to Queue')
+        .setColor(0x111111)
+        .setAuthor({ name: 'KH.AI STUDIO' })
+        .setTitle(result.isPlayingNow ? 'NOW PLAYING' : 'TRACK ENQUEUED')
         .setDescription(`[**${song.title}**](${song.url})`)
         .addFields(
-          { name: '👤 Artist / Channel', value: song.author || 'Unknown', inline: true },
-          { name: '⏱️ Duration', value: song.duration || 'Live / Unknown', inline: true },
+          { name: 'ARTIST', value: song.author || 'Unknown', inline: true },
+          { name: 'DURATION', value: song.duration || 'Live / Unknown', inline: true },
           {
-            name: '📊 Queue Position',
-            value: result.isPlayingNow ? 'Playing Now' : `#${result.position}`,
+            name: 'STATUS',
+            value: result.isPlayingNow ? 'Active' : `Position #${result.position}`,
             inline: true,
           }
         )
         .setFooter({
-          text: `Requested by ${interaction.user.tag} • Plays until /disconnect`,
-          iconURL: interaction.user.displayAvatarURL(),
+          text: `Requested by ${interaction.user.username} • kh.ai studio`,
         })
         .setTimestamp();
 
@@ -132,7 +132,7 @@ module.exports = {
     } catch (error) {
       console.error('Error in /play command:', error);
       return interaction.editReply({
-        content: `❌ Error playing song: ${error.message || 'An unexpected error occurred.'}`,
+        content: `Error playing song: ${error.message || 'An unexpected error occurred.'}`,
       });
     }
   },
