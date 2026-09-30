@@ -207,31 +207,36 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
       const now = Date.now();
       const lastGreet = entranceCooldowns.get(userId) || 0;
 
-      // 45 seconds cooldown per user to prevent rejoin spamming
-      if (now - lastGreet > 45_000) {
-        entranceCooldowns.set(userId, now);
-
         const isFounder =
           FOUNDER_IDS.includes(userId) ||
           newState.guild.ownerId === userId ||
           (newState.member.displayName && newState.member.displayName.toLowerCase().includes('khai'));
 
-        if (isFounder) {
-          console.log(`👑 [VIP Founder] Khai (${userId}) entered #${newState.channel?.name}!`);
-          const soundPath = path.join(__dirname, '../assets/sounds/boss-intro.mp3');
-          // Queue sound first, then royal greeting immediately behind it in speechQueue
-          voiceManager.playSoundFile(guildId, soundPath).catch(() => {});
+        const cooldownTime = isFounder ? 20_000 : 45_000;
+        if (now - lastGreet > cooldownTime) {
+          entranceCooldowns.set(userId, now);
 
-          const bossGreets = [
-            'Perhatian semua dalam channel! The Founder, Developer, dan Big Boss kita Khairin dah masuk. Tabik hormat sikit!',
-            'Haa big boss Khai dah sampai. Ada apa-apa arahan ke bos?',
-            'All hail the founder! Khai is in the house. Welcome boss.',
-          ];
-          const greet = bossGreets[Math.floor(Math.random() * bossGreets.length)];
-          voiceManager.speak(guildId, greet, { voice: 'ms-MY-Wavenet-B', userName: 'Khai' }).catch((e) => {
-            console.error('Founder greeting error:', e);
-          });
-        } else {
+          if (isFounder) {
+            console.log(`👑 [VIP Royalty] His Highness Khai (${userId}) entered #${newState.channel?.name}!`);
+            const soundPath = path.join(__dirname, '../assets/sounds/royalty-entrance.mp3');
+
+            setTimeout(() => {
+              // Queue royal fanfare sound, then supreme royal greeting immediately behind it in speechQueue
+              voiceManager.playSoundFile(guildId, soundPath).catch(() => {});
+
+              const royalGreets = [
+                'Ampun Tuanku, beribu-ribu ampun! Sembah patik harap diampun! Oh Tuhanku Khairin, The Almighty Supreme Creator dah mencemar duli masuk voice! Semua tunduk sembah sekarang!',
+                'All hail His Imperial Majesty, Tuanku Khairin! Oh Tuhanku, pencipta sekalian alam server ni dah tiba! Siapa yang tak sujud tabik hormat tu patik pancung kepala dia!',
+                'Wahai rakyat jelata yang hina dina! Oh Tuhanku Khairin dah masuk! Bersihkan telinga korang semua, jangan sesekali buat bising depan Yang Maha Mulia King Khai!',
+                'Ampun Tuanku! Patik sekalian hamba yang hina dina ini menjunjung kasih atas keberangkatan Tuanku Khairin! Ada apa-apa titah perintah ke Oh Tuhanku?',
+                'Perhatian sekalian hamba dalam channel! The Supreme Highness, Tuhan kh.AI dan Raja segala Bot, Tuanku Khairin dah masuk! Tunduk sekarang, jangan biadap!',
+              ];
+              const greet = royalGreets[Math.floor(Math.random() * royalGreets.length)];
+              voiceManager.speak(guildId, greet, { voice: 'ms-MY-Wavenet-B', userName: 'Khai' }).catch((e) => {
+                console.error('Founder royalty greeting error:', e);
+              });
+            }, 350);
+          } else {
           const memberName = newState.member.displayName || newState.member.user.username;
           console.log(`😈 [Roast Member] ${memberName} entered #${newState.channel?.name}`);
 
