@@ -36,6 +36,9 @@ function cleanTextForSpeech(text) {
     )
     // Remove stray formatting brackets
     .replace(/[\[\]]/g, '')
+    // Normalize pronunciation: ensure Khairin is pronounced cleanly as 'Kairin' (Kai-rin)
+    .replace(/\bKhairin\b/gi, 'Kairin')
+    .replace(/\bQairin\b/gi, 'Kairin')
     // Normalize whitespace
     .replace(/\s+/g, ' ')
     .trim();

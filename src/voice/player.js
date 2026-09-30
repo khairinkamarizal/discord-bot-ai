@@ -469,6 +469,40 @@ class VoiceManager {
   }
 
   /**
+   * Speaks text over a background sound/music file simultaneously (mixed together with no delay).
+   * @param {string} guildId
+   * @param {string} bgmFilePath
+   * @param {string} speechText
+   * @param {object} [meta={}]
+   * @returns {Promise<{ isSpeakingNow: boolean, queuePosition: number }>}
+   */
+  async speakWithBgm(guildId, bgmFilePath, speechText, meta = {}) {
+    const guildState = this.guilds.get(guildId);
+    if (!guildState) {
+      throw new Error('Bot is not connected to a voice channel.');
+    }
+
+    const item = {
+      type: 'mixed',
+      bgmFilePath,
+      text: speechText,
+      ...meta,
+    };
+
+    guildState.speechQueue.push(item);
+    const queuePosition = guildState.speechQueue.length;
+
+    if (!guildState.isSpeaking) {
+      this._processSpeechQueue(guildId).catch((err) => {
+        console.error(`Error processing mixed speech queue in guild ${guildId}:`, err);
+      });
+      return { isSpeakingNow: true, queuePosition: 0 };
+    } else {
+      return { isSpeakingNow: false, queuePosition };
+    }
+  }
+
+  /**
    * Processes the next speech/sound item in the guild's speech queue.
    * @private
    * @param {string} guildId
@@ -523,7 +557,26 @@ class VoiceManager {
     mixer.startSpeech();
 
     let speechFFmpeg;
-    if (item.type === 'sound') {
+    if (item.type === 'mixed') {
+      const ttsStream = await this.ttsService.getAudioStream(item.text, item.voice);
+      speechFFmpeg = new prism.FFmpeg({
+        args: [
+          '-nostdin',
+          '-i', item.bgmFilePath,
+          '-f', 'mp3',
+          '-i', 'pipe:0',
+          '-filter_complex', '[0:a]volume=0.35[bgm];[1:a]volume=1.2[voice];[bgm][voice]amix=inputs=2:duration=longest',
+          '-f', 's16le',
+          '-ar', '48000',
+          '-ac', '2',
+        ],
+      });
+      ttsStream.on('error', (err) => {
+        console.error('TTS stream error during mixed ducking:', err);
+        mixer.notifyTTSEnd();
+      });
+      ttsStream.pipe(speechFFmpeg);
+    } else if (item.type === 'sound') {
       speechFFmpeg = new prism.FFmpeg({
         args: [
           '-nostdin',
@@ -603,7 +656,31 @@ class VoiceManager {
   async _playSpeechStandalone(guildState, item) {
     let resource;
 
-    if (item.type === 'sound') {
+    if (item.type === 'mixed') {
+      const ttsStream = await this.ttsService.getAudioStream(item.text, item.voice);
+      const ffmpeg = new prism.FFmpeg({
+        args: [
+          '-nostdin',
+          '-i', item.bgmFilePath,
+          '-f', 'mp3',
+          '-i', 'pipe:0',
+          '-filter_complex', '[0:a]volume=0.35[bgm];[1:a]volume=1.2[voice];[bgm][voice]amix=inputs=2:duration=longest',
+          '-f', 's16le',
+          '-ar', '48000',
+          '-ac', '2',
+        ],
+      });
+      guildState.activeSpeechFFmpeg = ffmpeg;
+      ttsStream.on('error', (err) => {
+        console.error('TTS stream error in standalone mixed:', err);
+      });
+      ttsStream.pipe(ffmpeg);
+      resource = createAudioResource(ffmpeg, {
+        inputType: StreamType.Raw,
+        inlineVolume: true,
+      });
+      resource.volume?.setVolume(0.5);
+    } else if (item.type === 'sound') {
       const ffmpeg = new prism.FFmpeg({
         args: [
           '-nostdin',
