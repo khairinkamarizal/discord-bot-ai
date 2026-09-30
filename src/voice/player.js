@@ -45,6 +45,16 @@ class VoiceManager {
      * }
      */
     this.guilds = new Map();
+    this.roastMode = true;
+  }
+
+  setRoastMode(enabled) {
+    this.roastMode = !!enabled;
+    return this.roastMode;
+  }
+
+  isRoastMode() {
+    return this.roastMode !== false;
   }
 
   /**
@@ -286,7 +296,7 @@ class VoiceManager {
    * @param {object} song - Song metadata including streamUrl
    * @returns {{ isPlayingNow: boolean, position: number }}
    */
-  async playSong(guildId, song) {
+  async playSong(guildId, song, immediate = false) {
     const guildState = this.guilds.get(guildId);
     if (!guildState) {
       throw new Error('Bot is not connected to a voice channel.');
@@ -296,6 +306,16 @@ class VoiceManager {
       type: 'song',
       ...song,
     };
+
+    if (immediate) {
+      guildState.queue = [item];
+      this._cleanupStreams(guildState);
+      try {
+        guildState.player.stop(true);
+      } catch (_) {}
+      await this.playNext(guildId);
+      return { isPlayingNow: true, position: 0 };
+    }
 
     if (!guildState.isPlaying) {
       guildState.queue.push(item);
@@ -428,6 +448,56 @@ class VoiceManager {
     } else {
       guildState.queue.push(item);
       await this.playNext(guildId);
+    }
+  }
+
+  /**
+   * Plays a local sound effect file into the voice channel.
+   * If a song is playing, ducks the song and plays the sound effect over it!
+   * @param {string} guildId
+   * @param {string} soundFilePath
+   */
+  async playSoundFile(guildId, soundFilePath) {
+    const guildState = this.guilds.get(guildId);
+    if (!guildState || !fs.existsSync(soundFilePath)) return;
+
+    if (guildState.isPlaying && guildState.activeMixer) {
+      const mixer = guildState.activeMixer;
+      mixer.startSpeech();
+
+      const ffmpeg = new prism.FFmpeg({
+        args: [
+          '-nostdin',
+          '-i', soundFilePath,
+          '-analyzeduration', '0',
+          '-loglevel', '0',
+          '-f', 's16le',
+          '-ar', '48000',
+          '-ac', '2',
+        ],
+      });
+
+      ffmpeg.on('data', (chunk) => mixer.addTTSChunk(chunk));
+      ffmpeg.once('end', () => mixer.notifyTTSEnd());
+      ffmpeg.once('error', () => mixer.endSpeech());
+    } else {
+      const ffmpeg = new prism.FFmpeg({
+        args: [
+          '-nostdin',
+          '-i', soundFilePath,
+          '-analyzeduration', '0',
+          '-loglevel', '0',
+          '-f', 's16le',
+          '-ar', '48000',
+          '-ac', '2',
+        ],
+      });
+      const resource = createAudioResource(ffmpeg, {
+        inputType: StreamType.Raw,
+        inlineVolume: true,
+      });
+      resource.volume?.setVolume(0.5);
+      guildState.player.play(resource);
     }
   }
 

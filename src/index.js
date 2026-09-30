@@ -30,10 +30,17 @@ if (!process.env.DISCORD_TOKEN) {
   process.exit(1);
 }
 
-// Initialize Discord client
+// Initialize Discord client with message intents for @mention chatting
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMessages,
+  ],
 });
+
+// Cooldown tracker for voice entrance roasts (userId -> timestamp)
+const entranceCooldowns = new Map();
 
 client.commands = new Collection();
 
@@ -149,39 +156,143 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-// Handle voice state updates (channel moves, external drops, etc.)
+// Handle voice state updates (channel moves, external drops, and entrance roaster/VIP)
 client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
-  if (newState.member?.id !== client.user?.id) return;
-
-  // Bot was moved to another voice channel
-  if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
-    console.log(`🔀 Bot moved to channel: ${newState.channel?.name}`);
-    const guildState = voiceManager.guilds.get(newState.guild.id);
-    if (guildState) {
-      guildState.channelId = newState.channelId;
-      guildState.channelName = newState.channel?.name || 'voice';
-      guildState.channel = newState.channel;
-      voiceManager.saveChannel(newState.guild.id, newState.channelId);
-    }
-  } else if (oldState.channelId && !newState.channelId) {
-    // Bot was disconnected from voice externally (e.g. network glitch or kicked without /disconnect)
-    const guildState = voiceManager.guilds.get(oldState.guild.id);
-    if (guildState && !guildState.explicitDisconnect) {
-      console.log(`⚠️ Bot disconnected externally from #${oldState.channel?.name}. Auto-rejoining in 3s...`);
-      setTimeout(async () => {
-        try {
-          if (!guildState.explicitDisconnect && !voiceManager.isConnected(oldState.guild.id)) {
-            const ch = oldState.guild.channels.cache.get(oldState.channelId);
-            if (ch && ch.isVoiceBased()) {
-              await voiceManager.join(ch);
-              console.log(`✅ Successfully auto-rejoined #${ch.name}!`);
+  // CASE 1: The bot itself changed voice state
+  if (newState.member?.id === client.user?.id) {
+    // Bot was moved to another voice channel
+    if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
+      console.log(`🔀 Bot moved to channel: ${newState.channel?.name}`);
+      const guildState = voiceManager.guilds.get(newState.guild.id);
+      if (guildState) {
+        guildState.channelId = newState.channelId;
+        guildState.channelName = newState.channel?.name || 'voice';
+        guildState.channel = newState.channel;
+        voiceManager.saveChannel(newState.guild.id, newState.channelId);
+      }
+    } else if (oldState.channelId && !newState.channelId) {
+      // Bot was disconnected from voice externally (e.g. network glitch or kicked without /disconnect)
+      const guildState = voiceManager.guilds.get(oldState.guild.id);
+      if (guildState && !guildState.explicitDisconnect) {
+        console.log(`⚠️ Bot disconnected externally from #${oldState.channel?.name}. Auto-rejoining in 3s...`);
+        setTimeout(async () => {
+          try {
+            if (!guildState.explicitDisconnect && !voiceManager.isConnected(oldState.guild.id)) {
+              const ch = oldState.guild.channels.cache.get(oldState.channelId);
+              if (ch && ch.isVoiceBased()) {
+                await voiceManager.join(ch);
+                console.log(`✅ Successfully auto-rejoined #${ch.name}!`);
+              }
             }
+          } catch (err) {
+            console.warn('Auto-rejoin on voiceStateUpdate failed:', err.message);
           }
-        } catch (err) {
-          console.warn('Auto-rejoin on voiceStateUpdate failed:', err.message);
-        }
-      }, 3000);
+        }, 3000);
+      }
     }
+    return;
+  }
+
+  // CASE 2: Other members joining the voice channel kh.AI is in (Auto-Bahan & Boss VIP Intro)
+  if (!newState.member?.user?.bot && voiceManager.isRoastMode()) {
+    const guildId = newState.guild.id;
+    const guildState = voiceManager.guilds.get(guildId);
+    const botChannelId = guildState?.channelId;
+
+    if (botChannelId && newState.channelId === botChannelId && oldState.channelId !== botChannelId) {
+      const userId = newState.member.id;
+      const now = Date.now();
+      const lastGreet = entranceCooldowns.get(userId) || 0;
+
+      // 45 seconds cooldown per user to prevent rejoin spamming
+      if (now - lastGreet > 45_000) {
+        entranceCooldowns.set(userId, now);
+
+        const isFounder =
+          userId === '443621655630053376' ||
+          newState.guild.ownerId === userId ||
+          (newState.member.displayName && newState.member.displayName.toLowerCase().includes('khai'));
+
+        if (isFounder) {
+          console.log(`👑 [VIP Founder] Khai entered #${newState.channel?.name}!`);
+          const soundPath = path.join(__dirname, '../assets/sounds/boss-intro.mp3');
+          voiceManager.playSoundFile(guildId, soundPath).catch(() => {});
+
+          setTimeout(async () => {
+            try {
+              const bossGreets = [
+                'Perhatian semua dalam channel! The Founder, Developer, dan Big Boss kita Khairin dah masuk. Tabik hormat sikit!',
+                'Haa big boss Khai dah sampai. Ada apa-apa arahan ke bos?',
+                'All hail the founder! Khai is in the house. Welcome boss.',
+              ];
+              const greet = bossGreets[Math.floor(Math.random() * bossGreets.length)];
+              await voiceManager.speak(guildId, greet, { voice: 'ms-MY-Wavenet-B' });
+            } catch (e) {
+              console.error('Founder greeting error:', e);
+            }
+          }, 1200);
+        } else {
+          const memberName = newState.member.displayName || newState.member.user.username;
+          console.log(`😈 [Roast Member] ${memberName} entered #${newState.channel?.name}`);
+
+          setTimeout(async () => {
+            try {
+              const roasts = [
+                `Haa masuk pun kau ${memberName}, ingatkan dah kena culik dengan alien.`,
+                `Aduh, siapa jemput ${memberName} masuk ni? Baru je aman damai tadi.`,
+                `Eh ${memberName}, kau masuk-masuk ni dah mandi ke belum? Dari jauh dah bau hangit.`,
+                `Tengok siapa yang baru masuk, orang paling tak ada life dalam server. Welcome ${memberName}.`,
+                `Masuk pun kau ${memberName}. Ingat eh, jangan sembang merapu malam ni.`,
+                `Haa ${memberName} dah sampai. Korang sorok barang berharga cepat.`,
+                `Well well well, look who decided to show up. Welcome ${memberName}, try not to embarrass yourself today.`,
+              ];
+              const roastText = roasts[Math.floor(Math.random() * roasts.length)];
+              await voiceManager.speak(guildId, roastText, { voice: 'ms-MY-Wavenet-B' });
+            } catch (e) {
+              console.error('Member roast error:', e);
+            }
+          }, 800);
+        }
+      }
+    }
+  }
+});
+
+// Handle text chat mentions (@kh.AI <message>)
+client.on(Events.MessageCreate, async (message) => {
+  if (message.author.bot) return;
+  if (!message.mentions.has(client.user.id) || message.mentions.everyone) return;
+
+  const cleanPrompt = message.content
+    .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
+    .trim();
+
+  if (!cleanPrompt) {
+    const responses = [
+      'Oi, tag-tag aku kenapa? Rindu ke?',
+      'Haa apa hal panggil aku? Nak suruh belanja makan ke?',
+      'Tag aku tapi tak cakap apa-apa, otak letak kat mana bro?',
+      'Ada apa sebut-sebut nama aku ni? Sembang biar ada isi sikit.',
+      'Yes, who summoned the one and only kh.AI? Speak up.',
+    ];
+    const replyText = responses[Math.floor(Math.random() * responses.length)];
+    return message.reply(replyText).catch(() => {});
+  }
+
+  try {
+    await message.channel.sendTyping();
+  } catch (_) {}
+
+  try {
+    const userName = message.member?.displayName || message.author.username;
+    const sessionId = message.channelId;
+
+    const { rawText } = await aiService.askQuestion(cleanPrompt, userName, sessionId);
+
+    await message.reply(rawText);
+  } catch (error) {
+    console.error('Error handling @mention chat:', error);
+    await message.reply('Aduh, pening kepala aku layan soalan kau ni. Cuba tanya benda berakal sikit.').catch(() => {});
   }
 });
 
