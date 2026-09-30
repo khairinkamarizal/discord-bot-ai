@@ -16,11 +16,11 @@ module.exports = {
         .setDescription('Optional: Choose speaker persona')
         .setRequired(false)
         .addChoices(
-          { name: 'Auto (Malay: Yasmin / English: Guy)', value: 'auto' },
-          { name: 'Malay (Yasmin - Female)', value: 'yasmin' },
-          { name: 'Malay (Osman - Male)', value: 'osman' },
-          { name: 'English (Guy - Male)', value: 'guy' },
-          { name: 'English (Jenny - Female)', value: 'jenny' }
+          { name: 'Auto (Malay: WaveNet / English: Studio)', value: 'auto' },
+          { name: 'English (Male - Studio-Q)', value: 'guy' },
+          { name: 'English (Female - Studio-O)', value: 'jenny' },
+          { name: 'Malay (Male - WaveNet)', value: 'osman' },
+          { name: 'Malay (Female - WaveNet)', value: 'yasmin' }
         )
     ),
 
@@ -88,10 +88,10 @@ module.exports = {
 
       // 4. Friendly label for the voice
       let voiceLabel = selectedVoice;
-      if (selectedVoice.includes('Yasmin')) voiceLabel = 'Malay (Yasmin - Female)';
-      else if (selectedVoice.includes('Osman')) voiceLabel = 'Malay (Osman - Male)';
-      else if (selectedVoice.includes('Guy')) voiceLabel = 'English (Guy - Male)';
-      else if (selectedVoice.includes('Jenny')) voiceLabel = 'English (Jenny - Female)';
+      if (selectedVoice.includes('Studio-Q') || selectedVoice.includes('Guy')) voiceLabel = 'English (Studio-Q - Studio HD)';
+      else if (selectedVoice.includes('Studio-O') || selectedVoice.includes('Jenny')) voiceLabel = 'English (Studio-O - Studio HD)';
+      else if (selectedVoice.includes('Wavenet-B') || selectedVoice.includes('Osman')) voiceLabel = 'Malay (WaveNet-B - Male HD)';
+      else if (selectedVoice.includes('Wavenet-A') || selectedVoice.includes('Yasmin')) voiceLabel = 'Malay (WaveNet-A - Female HD)';
 
       // 5. Display the response embed in text chat
       const isMusicPlaying = guildState?.currentTrack?.type === 'song';
