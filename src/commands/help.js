@@ -13,14 +13,15 @@ module.exports = {
       .setColor(0x5865f2)
       .setTitle('🤖 kh.AI — Commands & Guide')
       .setDescription(
-        '**kh.AI** is your 24/7 Discord companion powered by Vertex AI and Microsoft Neural TTS, founded & built by **Khairin (Khai)**.\n\n' +
+        '**kh.AI** is your 24/7 Discord companion powered by Vertex AI and Google Cloud Studio & WaveNet TTS, founded & built by **Khairin (Khai)**.\n\n' +
         'Here are all the commands you can use:'
       )
       .addFields(
         {
-          name: '🎙️ Voice AI',
+          name: '🎙️ Voice AI & Speech',
           value:
             '• `/ask <question> [voice]` — Ask kh.AI anything out loud in voice chat (funny rude & savage banter!).\n' +
+            '• `/say <text> [voice]` — Make kh.AI speak whatever text you want out loud in the voice channel!\n' +
             '• `/reset` — Clear conversational memory for this channel.',
         },
         {
