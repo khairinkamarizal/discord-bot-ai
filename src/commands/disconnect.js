@@ -12,7 +12,7 @@ module.exports = {
   async execute(interaction, { voiceManager }) {
     await interaction.deferReply();
 
-    const disconnected = voiceManager.disconnect(interaction.guildId);
+    const disconnected = voiceManager.disconnect(interaction.guildId, true);
 
     if (!disconnected) {
       return interaction.editReply({

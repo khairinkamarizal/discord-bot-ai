@@ -1,4 +1,8 @@
+const fs = require('fs');
+const path = require('path');
 const prism = require('prism-media');
+
+const STATE_FILE = path.join(__dirname, '../../voice-state.json');
 
 // Prefer system FFmpeg binary over bundled static binaries (which hang on HTTPS streams in Linux)
 const systemFFmpeg = process.env.FFMPEG_PATH || 'ffmpeg';
@@ -49,6 +53,40 @@ class VoiceManager {
    */
   setMusicService(musicService) {
     this.musicService = musicService;
+  }
+
+  saveChannel(guildId, channelId) {
+    try {
+      let data = {};
+      if (fs.existsSync(STATE_FILE)) {
+        data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+      }
+      data[guildId] = channelId;
+      fs.writeFileSync(STATE_FILE, JSON.stringify(data, null, 2));
+    } catch (e) {
+      console.warn('Failed to save voice channel state:', e.message);
+    }
+  }
+
+  clearSavedChannel(guildId) {
+    try {
+      if (fs.existsSync(STATE_FILE)) {
+        const data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        delete data[guildId];
+        fs.writeFileSync(STATE_FILE, JSON.stringify(data, null, 2));
+      }
+    } catch (e) {
+      console.warn('Failed to clear voice channel state:', e.message);
+    }
+  }
+
+  getSavedChannels() {
+    try {
+      if (fs.existsSync(STATE_FILE)) {
+        return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+      }
+    } catch (e) {}
+    return {};
   }
 
   /**
@@ -106,9 +144,12 @@ class VoiceManager {
       isPlaying: false,
       channelId: channel.id,
       channelName: channel.name,
+      channel: channel,
+      explicitDisconnect: false,
     };
 
     this.guilds.set(guildId, guildState);
+    this.saveChannel(guildId, channel.id);
 
     // Audio player state tracking and logging
     player.on('stateChange', (oldState, newState) => {
@@ -125,20 +166,54 @@ class VoiceManager {
       this.playNext(guildId);
     });
 
-    // Connection lifecycle listeners
+    // Connection lifecycle listeners with auto-recovery
     connection.on(VoiceConnectionStatus.Disconnected, async () => {
       try {
         await Promise.race([
-          entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
-          entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
+          entersState(connection, VoiceConnectionStatus.Signalling, 10_000),
+          entersState(connection, VoiceConnectionStatus.Connecting, 10_000),
         ]);
       } catch (e) {
-        this.disconnect(guildId);
+        if (!guildState.explicitDisconnect) {
+          console.log(`🔄 Voice disconnected from #${channel.name}. Auto-reconnecting in 3 seconds...`);
+          try {
+            connection.destroy();
+          } catch (_) {}
+          this.guilds.delete(guildId);
+
+          setTimeout(async () => {
+            try {
+              if (!guildState.explicitDisconnect && !this.isConnected(guildId)) {
+                await this.join(channel);
+                console.log(`✅ Successfully auto-reconnected to #${channel.name}!`);
+              }
+            } catch (err) {
+              console.error(`Auto-reconnect to #${channel.name} failed:`, err.message);
+            }
+          }, 3_000);
+        } else {
+          this.disconnect(guildId, true);
+        }
       }
     });
 
     connection.on(VoiceConnectionStatus.Destroyed, () => {
-      this.disconnect(guildId);
+      if (!guildState.explicitDisconnect) {
+        console.log(`⚠️ Voice connection destroyed unexpectedly in #${channel.name}. Auto-rejoining in 3 seconds...`);
+        this.guilds.delete(guildId);
+        setTimeout(async () => {
+          try {
+            if (!guildState.explicitDisconnect && !this.isConnected(guildId)) {
+              await this.join(channel);
+              console.log(`✅ Successfully auto-rejoined #${channel.name}!`);
+            }
+          } catch (err) {
+            console.error(`Auto-rejoin #${channel.name} failed:`, err.message);
+          }
+        }, 3_000);
+      } else {
+        this.disconnect(guildId, true);
+      }
     });
 
     return guildState;
@@ -147,10 +222,15 @@ class VoiceManager {
   /**
    * Disconnects from the voice channel in a guild and cleans up all audio streams.
    * @param {string} guildId
+   * @param {boolean} [isExplicit=false] - Whether this was initiated by /disconnect command
    */
-  disconnect(guildId) {
+  disconnect(guildId, isExplicit = false) {
     const guildState = this.guilds.get(guildId);
     if (guildState) {
+      if (isExplicit) {
+        guildState.explicitDisconnect = true;
+        this.clearSavedChannel(guildId);
+      }
       guildState.queue = [];
       guildState.currentTrack = null;
       guildState.isPlaying = false;
@@ -166,6 +246,9 @@ class VoiceManager {
       return true;
     }
 
+    if (isExplicit) {
+      this.clearSavedChannel(guildId);
+    }
     const existing = getVoiceConnection(guildId);
     if (existing) {
       try {
@@ -308,7 +391,7 @@ class VoiceManager {
 
         ttsStream.on('error', (err) => {
           console.error('TTS stream error during ducking:', err);
-          finishSpeech();
+          mixer.endSpeech();
         });
 
         ttsStream.pipe(ttsFFmpeg);
@@ -536,7 +619,14 @@ class VoiceManager {
    * @param {string} guildId
    */
   isConnected(guildId) {
-    return this.guilds.has(guildId);
+    const s = this.guilds.get(guildId);
+    if (!s || !s.connection) return false;
+    const st = s.connection.state.status;
+    return (
+      st === VoiceConnectionStatus.Ready ||
+      st === VoiceConnectionStatus.Connecting ||
+      st === VoiceConnectionStatus.Signalling
+    );
   }
 
   /**

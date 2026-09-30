@@ -77,6 +77,26 @@ client.once(Events.ClientReady, async (readyClient) => {
     console.error('Failed to pre-load music extractors:', err);
   });
 
+  // Auto-restore persistent voice channels
+  try {
+    const savedChannels = voiceManager.getSavedChannels();
+    for (const [guildId, channelId] of Object.entries(savedChannels)) {
+      try {
+        const guild = readyClient.guilds.cache.get(guildId);
+        if (!guild) continue;
+        const channel = guild.channels.cache.get(channelId);
+        if (channel && channel.isVoiceBased()) {
+          console.log(`🔄 [Auto-Restore] Rejoining voice channel "${channel.name}" in "${guild.name}"...`);
+          await voiceManager.join(channel);
+        }
+      } catch (err) {
+        console.warn(`Failed to auto-restore voice channel ${channelId}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('Error during voice auto-restore:', err);
+  }
+
   // Register slash commands automatically
   try {
     // 1. Instant registration for all current guilds (bypasses Discord's 1-hour global cache delay)
@@ -129,6 +149,42 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
+// Handle voice state updates (channel moves, external drops, etc.)
+client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
+  if (newState.member?.id !== client.user?.id) return;
+
+  // Bot was moved to another voice channel
+  if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
+    console.log(`🔀 Bot moved to channel: ${newState.channel?.name}`);
+    const guildState = voiceManager.guilds.get(newState.guild.id);
+    if (guildState) {
+      guildState.channelId = newState.channelId;
+      guildState.channelName = newState.channel?.name || 'voice';
+      guildState.channel = newState.channel;
+      voiceManager.saveChannel(newState.guild.id, newState.channelId);
+    }
+  } else if (oldState.channelId && !newState.channelId) {
+    // Bot was disconnected from voice externally (e.g. network glitch or kicked without /disconnect)
+    const guildState = voiceManager.guilds.get(oldState.guild.id);
+    if (guildState && !guildState.explicitDisconnect) {
+      console.log(`⚠️ Bot disconnected externally from #${oldState.channel?.name}. Auto-rejoining in 3s...`);
+      setTimeout(async () => {
+        try {
+          if (!guildState.explicitDisconnect && !voiceManager.isConnected(oldState.guild.id)) {
+            const ch = oldState.guild.channels.cache.get(oldState.channelId);
+            if (ch && ch.isVoiceBased()) {
+              await voiceManager.join(ch);
+              console.log(`✅ Successfully auto-rejoined #${ch.name}!`);
+            }
+          }
+        } catch (err) {
+          console.warn('Auto-rejoin on voiceStateUpdate failed:', err.message);
+        }
+      }, 3000);
+    }
+  }
+});
+
 // Graceful shutdown handling
 const handleShutdown = async (signal) => {
   console.log(
@@ -147,6 +203,15 @@ const handleShutdown = async (signal) => {
 
 process.on('SIGINT', () => handleShutdown('SIGINT'));
 process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+
+// Global anti-crash handlers to prevent transient errors from killing the process
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️ [Anti-Crash] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err, origin) => {
+  console.error(`⚠️ [Anti-Crash] Uncaught Exception (${origin}):`, err);
+});
 
 // Log in to Discord
 client.login(process.env.DISCORD_TOKEN).catch((err) => {
