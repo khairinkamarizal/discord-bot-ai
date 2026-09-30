@@ -43,13 +43,20 @@ function cleanTextForSpeech(text) {
 
 class AIService {
   constructor() {
-    // Auto-detect local gcp-key.json if present
-    const defaultKeyPath = path.resolve(process.cwd(), 'gcp-key.json');
+    const projectRoot = path.resolve(__dirname, '../../');
+    const defaultKeyPath = fs.existsSync(path.resolve(projectRoot, 'gcp-key.json'))
+      ? path.resolve(projectRoot, 'gcp-key.json')
+      : path.resolve(process.cwd(), 'gcp-key.json');
+
     if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-      process.env.GOOGLE_APPLICATION_CREDENTIALS = path.resolve(
-        process.cwd(),
-        process.env.GOOGLE_APPLICATION_CREDENTIALS
-      );
+      const specified = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+      if (path.isAbsolute(specified)) {
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = specified;
+      } else if (fs.existsSync(path.resolve(projectRoot, specified))) {
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = path.resolve(projectRoot, specified);
+      } else {
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = path.resolve(process.cwd(), specified);
+      }
       process.env.GOOGLE_GENAI_USE_VERTEXAI = 'true';
     } else if (fs.existsSync(defaultKeyPath)) {
       process.env.GOOGLE_APPLICATION_CREDENTIALS = defaultKeyPath;
