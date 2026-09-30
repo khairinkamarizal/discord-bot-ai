@@ -48,7 +48,7 @@ module.exports = {
         };
       }
 
-      const { buffer, text } = await aiService.generateImage(prompt, referenceImage);
+      const { buffer, text, modelUsed } = await aiService.generateImage(prompt, referenceImage);
       const attachment = new AttachmentBuilder(buffer, { name: 'imagine.png' });
 
       const embed = new EmbedBuilder()
@@ -60,6 +60,14 @@ module.exports = {
         .setFooter({ text: 'kh.ai studio' })
         .setTimestamp();
 
+      if (modelUsed) {
+        embed.addFields({
+          name: 'MODEL',
+          value: modelUsed,
+          inline: true,
+        });
+      }
+
       if (referenceAttachment) {
         embed.addFields({
           name: 'MODE',
@@ -69,7 +77,7 @@ module.exports = {
       }
 
       if (text && text.length > 0 && !text.toLowerCase().includes("here's that image")) {
-        embed.addFields({ name: 'NOTES', value: text, inline: !referenceAttachment });
+        embed.addFields({ name: 'NOTES', value: text, inline: false });
       }
 
       return await interaction.editReply({
