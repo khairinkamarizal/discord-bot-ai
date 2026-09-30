@@ -272,9 +272,9 @@ client.on(Events.MessageCreate, async (message) => {
     const responses = [
       'Oi, tag-tag aku kenapa? Rindu ke?',
       'Haa apa hal panggil aku? Nak suruh belanja makan ke?',
-      'Tag aku tapi tak cakap apa-apa, otak letak kat mana bro?',
-      'Ada apa sebut-sebut nama aku ni? Sembang biar ada isi sikit.',
-      'Yes, who summoned the one and only kh.AI? Speak up.',
+      'Tag aku tapi tak taip pape, kau kenapa mat?',
+      'Tag tapi senyap, nak ajak lepak mamak ke apa ni?',
+      'Bro tagged me and vanished into thin air, pehal tu?',
     ];
     const replyText = responses[Math.floor(Math.random() * responses.length)];
     return message.reply(replyText).catch(() => {});
@@ -287,7 +287,7 @@ client.on(Events.MessageCreate, async (message) => {
   try {
     const isFounder = FOUNDER_IDS.includes(message.author.id);
     const userName = isFounder
-      ? 'Khai (Founder & Boss)'
+      ? 'Khai (Founder)'
       : (message.member?.displayName || message.author.username);
     const sessionId = message.channelId;
 
@@ -296,7 +296,7 @@ client.on(Events.MessageCreate, async (message) => {
     await message.reply(rawText);
   } catch (error) {
     console.error('Error handling @mention chat:', error);
-    await message.reply('Aduh, pening kepala aku layan soalan kau ni. Cuba tanya benda berakal sikit.').catch(() => {});
+    await message.reply('Aduh, pening jap kepala aku nak process. Cuba tanya elok sikit lebih kurang.').catch(() => {});
   }
 });
 

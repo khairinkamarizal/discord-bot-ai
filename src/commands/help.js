@@ -3,50 +3,49 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('help')
-    .setDescription('View the list of available commands and how to use kh.AI'),
+    .setDescription('View the command directory and system guide'),
 
   /**
    * @param {import('discord.js').ChatInputCommandInteraction} interaction
    */
   async execute(interaction) {
     const embed = new EmbedBuilder()
-      .setColor(0x5865f2)
-      .setTitle('🤖 kh.AI — Commands & Guide')
+      .setColor(0x1a1a1a)
+      .setTitle('KH.AI / DIRECTORY')
       .setDescription(
-        '**kh.AI** is your 24/7 Discord companion powered by Vertex AI and Google Cloud Studio & WaveNet TTS, founded & built by **Khairin (Khai)**.\n\n' +
-        'Here are all the commands you can use:'
+        'Comprehensive index of controls for voice dialogue, streaming audio, and image synthesis.'
       )
       .addFields(
         {
-          name: '🎙️ Voice AI & Chat',
+          name: 'VOICE & INTELLIGENCE',
           value:
-            '• `/ask <question> [voice]` — Ask kh.AI anything out loud in voice chat (funny rude & savage banter!).\n' +
-            '• `/say <text> [voice]` — Make kh.AI speak whatever text you want out loud in the voice channel!\n' +
-            '• `@kh.AI <message>` — Mention kh.AI in any text channel to chat directly in text!\n' +
-            '• `/roastmode <on|off>` — Toggle auto-roasting when members join voice.\n' +
-            '• `/reset` — Clear conversational memory for this channel.',
+            '`/ask <question> [voice]`\nInquire aloud in the voice channel with natural dialogue.\n\n' +
+            '`/say <text> [voice]`\nRender custom text into speech in your voice channel.\n\n' +
+            '`/imagine <prompt>`\nSynthesize visuals from conceptual descriptions.\n\n' +
+            '`/roastmode <on|off>`\nToggle ambient voice greetings upon channel entry.\n\n' +
+            '`/reset`\nClear conversational context for the current session.\n\n' +
+            '`@kh.AI <message>`\nEngage directly in any text channel.',
         },
         {
-          name: '🎵 Music & 24/7 Radio',
+          name: 'AUDIO & STREAMING',
           value:
-            '• `/radio <station>` — Stream 24/7 live continuous radio (Lofi, Synthwave, Ambient Chill, Cafe Jazz).\n' +
-            '• `/play <song>` — Play music from YouTube/Spotify in voice.\n' +
-            '• `/volume <1-100>` — Adjust playback volume (default: 20%).\n' +
-            '• `/pause` & `/resume` — Pause or resume playback.\n' +
-            '• `/skip` — Skip to the next song in queue.\n' +
-            '• `/queue` — View upcoming queued tracks.\n' +
-            '• `/stop` — Stop music/radio and clear queue.',
+            '`/play <query>`\nStream audio tracks from supported online platforms.\n\n' +
+            '`/radio <station>`\nBroadcast continuous 24/7 curated radio channels.\n\n' +
+            '`/volume [1-100] [channel]`\nInspect or regulate volume across music, voice, or master.\n\n' +
+            '`/pause` / `/resume`\nSuspend or resume active audio playback.\n\n' +
+            '`/skip`\nAdvance to the subsequent track in the queue.\n\n' +
+            '`/queue`\nDisplay upcoming scheduled tracks.\n\n' +
+            '`/stop`\nTerminate playback and clear the playlist.',
         },
         {
-          name: '🔊 Voice Channel & VIP',
+          name: 'CHANNEL CONTROLS',
           value:
-            '• `/join` — Connect kh.AI to your voice channel (stays 24/7).\n' +
-            '• `/disconnect` — Disconnect the bot from the voice channel.\n' +
-            '• 👑 *Khai VIP Entrance* — Epic boss sound & royal welcome when Khai joins voice!',
+            '`/join`\nConnect kh.AI to your active voice channel.\n\n' +
+            '`/disconnect`\nDisconnect from the voice channel and release session.',
         }
       )
       .setFooter({
-        text: 'kh.AI • Founded & Developed by Khairin (Khai)',
+        text: 'kh.ai help center',
       })
       .setTimestamp();
 

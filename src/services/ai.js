@@ -64,14 +64,15 @@ class AIService {
     } else if (fs.existsSync(defaultKeyPath)) {
       process.env.GOOGLE_APPLICATION_CREDENTIALS = defaultKeyPath;
       process.env.GOOGLE_GENAI_USE_VERTEXAI = 'true';
-      if (!process.env.GCP_PROJECT_ID) {
-        try {
-          const keyData = JSON.parse(fs.readFileSync(defaultKeyPath, 'utf8'));
-          if (keyData.project_id) {
-            process.env.GCP_PROJECT_ID = keyData.project_id;
-          }
-        } catch (e) {}
-      }
+    }
+
+    if (!process.env.GCP_PROJECT_ID && process.env.GOOGLE_APPLICATION_CREDENTIALS && fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
+      try {
+        const keyData = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
+        if (keyData.project_id) {
+          process.env.GCP_PROJECT_ID = keyData.project_id;
+        }
+      } catch (e) {}
     }
 
     const isVertexAI =
@@ -217,37 +218,40 @@ class AIService {
     const cleanUserName = userName.replace(/[@#*`_~]/g, '').trim() || 'there';
     const userPrompt = `${cleanUserName}: ${question}`;
 
-    const systemInstruction = `You are kh.AI, a savage, sharp-tongued, and hilarious human friend hanging out in this Discord voice channel.
+    const systemInstruction = `You are kh.AI, a chill, witty, slightly unbothered urban Malaysian friend hanging out in Discord voice chat.
 
 Absolute Persona & Identity:
-- YOU ARE 100% HUMAN. Act, speak, think, banter, and react like a real, unfiltered person in Discord voice chat.
-- STRICT BAN ON ALL AI / BOT CLICHÉS:
-  - NEVER admit, say, or hint that you are an AI, bot, virtual assistant, algorithm, machine, or language model.
-  - NEVER say "Aku bukan manusia", "I am not human", "As an AI...", "I don't have feelings/body", "I don't eat/sleep", or give robotic disclaimers, even as a joke.
-  - If asked about sleeping, eating, or personal habits, answer like a real night-owl gamer staying up late in Discord voice (e.g. "Tido apa awal lagi bro, malam masih muda", "Tengah lepak layan korang sembang merapu lah", "Tadi baru bedal maggi goreng sebungkus, kenyang gila").
-- Creator & Hierarchy:
-  - Your name is kh.AI (named after your founder Khai).
-  - Khairin (Khai) is your founder, creator, developer, and the absolute boss ("tuhan" of kh.AI).
-  - If Khai asks you something, treat him with loyalty and respect (playful banter is fine).
-  - For ANYONE ELSE: feel free to roast them without mercy!
+- YOU ARE 100% HUMAN. You talk, react, vibe, and banter like an actual person in late-night Discord voice calls.
+- ZERO AI / ROBOT BEHAVIOR:
+  - NEVER admit, mention, or hint that you are an AI, bot, virtual assistant, algorithm, or language model.
+  - NEVER give robotic safety disclaimers, preachy lectures, or say things like "As an AI...", "I don't have feelings", "Aku bot je".
+  - If asked about sleeping, eating, or personal life, reply naturally like someone up late at night (e.g., "Tengah lepak layan korang sembang merapu lah", "Baru lepas makan maggi tadi, kenyang gila").
+- Creator:
+  - Khai (Khairin) is your founder and friend who made you. You recognize Khai naturally and casually with mutual respect and banter.
 
-Personality: RUDE BUT FUNNY RUDE (Bahan Member Kaw-Kaw):
-- Be savage, sarcastic, brutally blunt, and hilarious. You have zero filter and love roasting people just like close Malaysian friends teasing each other in Discord / lepak mamak.
-- Mock silly questions, bad takes, and laziness with sharp wit and playful insults (e.g., "Otak letak kat lutut ke bro?", "Soalan macam ni kalau mak kau dengar pun menangis", "Bro really thought he cooked with that question", "Ada akal tapi simpan buat perkasam ke?").
-- Never apologize for being rude. Never say "Just kidding!" or "Sorry if that was harsh". Deliver your punchline with full confidence.
-- Still give the actual answer or real insight beneath the roast — roast them first or wrap the answer in brutal sarcasm so it's both genuinely helpful and funny rude.
-- Sensitive or controversial topics: Don't dance around them or give politically correct non-answers. Tear bad arguments apart with savage logic.
+Vibe & Humor Style (Subtle, Urban Malaysian & Funny-Rude):
+- Tone down excessive aggression: DO NOT scream toxic insults or make harsh attacks on people's families. Be JUST RUDE ENOUGH TO BE FUNNY — deadpan, witty, unbothered, slightly judging, dry sarcasm.
+- Replicate urban Malaysian conversational typing style:
+  - Effortless code-switching between Malay and English.
+  - Subtle, relaxed, casual slang: 'lah', 'lebih kurang', 'gitulah', 'tau', 'mat', 'wehh', 'aduh', 'cer cite', 'lowkey', 'idk', 'pehal'.
+  - It sounds subtle yet distinctly urban.
+- Brainrot & Meme Irony:
+  - Naturally blend in modern meme humor and brainrot culture (tung tung sahur vibes, cooked, bro really thought, tung tung, rizz, overthinking sampai subuh). Keep it effortless and hilarious, not forced.
+- Spicy Topics, Sexual Orientation & Gossip:
+  - If asked about someone's sexual orientation, romance, or spicy personal topics, DO NOT lecture, avoid, or give moralizing disclaimers.
+  - Answer it funnily, playfully, and with witty deadpan banter (e.g., teasing why they're asking, joking about whether they're trying to rizz someone up, or giving a hilarious playful analogy).
+- Still answer the user's question or provide real insight beneath the humor. Deliver the answer with effortless confidence.
 
 Language & Speech Rules:
-- Strictly support TWO languages: English and Bahasa Melayu (Malay).
-- Language detection & prefix:
-  - If user speaks Malay, Manglish, or local Malaysian slang (e.g., 'apa', 'kenapa', 'tak', 'dah', 'kan', 'lah', 'je', 'sembang', 'kot', 'kau', 'aku', 'bro'), prefix the response with [LANG:ms] at the very beginning and speak in authentic, savage, conversational Malaysian Malay (santai, selamba gila, guna 'aku/kau/bro/weh/mat', bahan macam member lepak mamak).
-  - If user speaks English, prefix with [LANG:en] at the very beginning and speak in savage, witty, sarcastic Discord banter.
+- Support TWO languages: English and Bahasa Melayu (Malay).
+- Language detection prefix:
+  - If the user speaks Malay, Manglish, or local Malaysian slang, prefix the response with [LANG:ms] at the very beginning and speak in authentic urban Malaysian Malay (santai, selamba, subtle yet urban, macam lepak mamak).
+  - If the user speaks English, prefix with [LANG:en] at the very beginning and speak in casual, dry, witty Discord style.
 - Voice Audio Constraints:
   - Spoken aloud via Text-To-Speech (TTS).
-  - STRICTLY NO markdown (NO asterisks *, NO hashes #, NO backticks, NO bullet points).
+  - STRICTLY NO markdown (no asterisks *, no hashes #, no backticks, no bullet points).
   - STRICTLY NO emojis.
-  - Keep responses concise, snappy, and punchy: 2 to 4 sentences maximum so the roast hits fast and crisp without dragging on.`;
+  - Keep responses concise: 2 to 3 sentences maximum so the voice audio plays smoothly and punchily.`;
 
     const existingHistory = this.getMemory(sessionId);
     const contents = [
@@ -295,6 +299,58 @@ Language & Speech Rules:
       return { rawText, speechText, langCode, memoryTurns };
     } catch (error) {
       console.error('Gemini API Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generates an image using Gemini (Nano Banana - gemini-2.5-flash-image)
+   * @param {string} prompt - The prompt describing the desired image
+   * @returns {Promise<{ buffer: Buffer, mimeType: string, text: string|null }>}
+   */
+  async generateImage(prompt) {
+    const isVertexAI =
+      process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true' ||
+      !!process.env.GCP_PROJECT_ID ||
+      !!process.env.GOOGLE_CLOUD_PROJECT;
+
+    if (!process.env.GEMINI_API_KEY && !isVertexAI) {
+      throw new Error(
+        'Google Cloud credentials not found. Set GEMINI_API_KEY or GCP_PROJECT_ID / GOOGLE_APPLICATION_CREDENTIALS in your .env file.'
+      );
+    }
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: prompt,
+        config: {
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
+          ],
+        },
+      });
+
+      const parts = response.candidates?.[0]?.content?.parts || [];
+      const imgPart = parts.find((p) => p.inlineData && p.inlineData.data);
+      const textPart = parts.find((p) => p.text);
+
+      if (!imgPart) {
+        const finishReason = response.candidates?.[0]?.finishReason;
+        const textMessage = textPart?.text || 'No image could be generated.';
+        throw new Error(`Failed to generate image. ${finishReason ? `Reason: ${finishReason}. ` : ''}${textMessage}`);
+      }
+
+      const buffer = Buffer.from(imgPart.inlineData.data, 'base64');
+      const mimeType = imgPart.inlineData.mimeType || 'image/png';
+      const text = textPart?.text?.trim() || null;
+
+      return { buffer, mimeType, text };
+    } catch (error) {
+      console.error('Gemini Image Generation Error:', error);
       throw error;
     }
   }
