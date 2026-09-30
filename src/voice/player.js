@@ -146,6 +146,10 @@ class VoiceManager {
       connection,
       player,
       queue: [],
+      speechQueue: [],
+      isSpeaking: false,
+      currentSpeech: null,
+      activeSpeechFFmpeg: null,
       currentTrack: null,
       activeMixer: null,
       musicFFmpeg: null,
@@ -166,13 +170,31 @@ class VoiceManager {
       console.log(`🎵 Player [${channel.guild.name} #${channel.name}]: ${oldState.status} ➔ ${newState.status}`);
     });
 
-    // Advance queue on track completion
+    // Advance queue on track or speech completion
     player.on(AudioPlayerStatus.Idle, () => {
+      // Check if standalone speech just finished
+      if (guildState.currentSpeech) {
+        guildState.currentSpeech = null;
+        guildState.currentResource = null;
+        setTimeout(() => {
+          this._processSpeechQueue(guildId);
+        }, 350);
+        return;
+      }
+
       this.playNext(guildId);
     });
 
     player.on('error', (err) => {
       console.error(`Audio player error in guild ${guildId}:`, err);
+      if (guildState.currentSpeech) {
+        guildState.currentSpeech = null;
+        guildState.currentResource = null;
+        setTimeout(() => {
+          this._processSpeechQueue(guildId);
+        }, 350);
+        return;
+      }
       this.playNext(guildId);
     });
 
@@ -242,8 +264,11 @@ class VoiceManager {
         this.clearSavedChannel(guildId);
       }
       guildState.queue = [];
+      guildState.speechQueue = [];
       guildState.currentTrack = null;
+      guildState.currentSpeech = null;
       guildState.isPlaying = false;
+      guildState.isSpeaking = false;
       this._cleanupStreams(guildState);
 
       try {
@@ -282,6 +307,12 @@ class VoiceManager {
       } catch (e) {}
       guildState.musicFFmpeg = null;
     }
+    if (guildState.activeSpeechFFmpeg) {
+      try {
+        guildState.activeSpeechFFmpeg.destroy();
+      } catch (e) {}
+      guildState.activeSpeechFFmpeg = null;
+    }
     if (guildState.activeMixer) {
       try {
         guildState.activeMixer.destroy();
@@ -317,7 +348,7 @@ class VoiceManager {
       return { isPlayingNow: true, position: 0 };
     }
 
-    if (!guildState.isPlaying) {
+    if (!guildState.isPlaying && !guildState.isSpeaking) {
       guildState.queue.push(item);
       await this.playNext(guildId);
       return { isPlayingNow: true, position: 0 };
@@ -372,13 +403,14 @@ class VoiceManager {
   }
 
   /**
-   * Speaks AI answer in voice.
-   * IF a song is playing: Smoothly ducks song volume to 20%, speaks over the background music,
-   * then restores song volume back to 100% when finished!
+   * Speaks AI answer or text in voice.
+   * If speech is already playing, adds to the speech queue.
+   * IF a song is playing: Ducks song volume smoothly and speaks over music.
    * IF no song is playing: Plays voice directly.
    * @param {string} guildId
    * @param {string} speechText
-   * @param {object} meta
+   * @param {object} [meta={}]
+   * @returns {Promise<{ isSpeakingNow: boolean, queuePosition: number }>}
    */
   async speak(guildId, speechText, meta = {}) {
     const guildState = this.guilds.get(guildId);
@@ -386,105 +418,116 @@ class VoiceManager {
       throw new Error('Bot is not connected to a voice channel.');
     }
 
-    // CASE 1: Song is currently playing with active mixer -> Duck & overlay!
-    if (guildState.isPlaying && guildState.activeMixer) {
-      const mixer = guildState.activeMixer;
-
-      // 1. Slowly lower music volume to 20%
-      mixer.startSpeech();
-
-      try {
-        // 2. Generate TTS audio stream with language-specific voice
-        const ttsStream = await this.ttsService.getAudioStream(speechText, meta.voice);
-
-        // 3. Transcode TTS stream to 48kHz 16-bit stereo PCM
-        const ttsFFmpeg = new prism.FFmpeg({
-          args: [
-            '-nostdin',
-            '-analyzeduration', '0',
-            '-loglevel', '0',
-            '-f', 's16le',
-            '-ar', '48000',
-            '-ac', '2',
-          ],
-        });
-
-        ttsStream.on('error', (err) => {
-          console.error('TTS stream error during ducking:', err);
-          mixer.endSpeech();
-        });
-
-        ttsStream.pipe(ttsFFmpeg);
-
-        ttsFFmpeg.on('data', (chunk) => {
-          mixer.addTTSChunk(chunk);
-        });
-
-        ttsFFmpeg.once('end', () => {
-          mixer.notifyTTSEnd();
-        });
-
-        ttsFFmpeg.once('error', (err) => {
-          console.error('TTS FFmpeg error during ducking:', err);
-          mixer.endSpeech();
-        });
-      } catch (err) {
-        console.error('Failed to overlay TTS speech over music:', err);
-        mixer.endSpeech();
-      }
-      return;
-    }
-
-    // CASE 2: No song is playing -> Play standalone voice response
     const item = {
       type: 'tts',
       text: speechText,
       ...meta,
     };
 
-    if (guildState.isPlaying) {
-      guildState.queue.unshift(item);
-      guildState.player.stop(true);
+    guildState.speechQueue.push(item);
+    const queuePosition = guildState.speechQueue.length;
+
+    if (!guildState.isSpeaking) {
+      this._processSpeechQueue(guildId).catch((err) => {
+        console.error(`Error processing speech queue in guild ${guildId}:`, err);
+      });
+      return { isSpeakingNow: true, queuePosition: 0 };
     } else {
-      guildState.queue.push(item);
-      await this.playNext(guildId);
+      return { isSpeakingNow: false, queuePosition };
     }
   }
 
   /**
    * Plays a local sound effect file into the voice channel.
-   * If a song is playing, ducks the song and plays the sound effect over it!
+   * Uses speech queue to avoid overlapping with speech or other sounds.
    * @param {string} guildId
    * @param {string} soundFilePath
+   * @param {object} [meta={}]
+   * @returns {Promise<{ isSpeakingNow: boolean, queuePosition: number }>}
    */
-  async playSoundFile(guildId, soundFilePath) {
+  async playSoundFile(guildId, soundFilePath, meta = {}) {
     const guildState = this.guilds.get(guildId);
     if (!guildState || !fs.existsSync(soundFilePath)) return;
 
-    if (guildState.isPlaying && guildState.activeMixer) {
-      const mixer = guildState.activeMixer;
-      mixer.startSpeech();
+    const item = {
+      type: 'sound',
+      filePath: soundFilePath,
+      ...meta,
+    };
 
-      const ffmpeg = new prism.FFmpeg({
-        args: [
-          '-nostdin',
-          '-i', soundFilePath,
-          '-analyzeduration', '0',
-          '-loglevel', '0',
-          '-f', 's16le',
-          '-ar', '48000',
-          '-ac', '2',
-        ],
+    guildState.speechQueue.push(item);
+    const queuePosition = guildState.speechQueue.length;
+
+    if (!guildState.isSpeaking) {
+      this._processSpeechQueue(guildId).catch((err) => {
+        console.error(`Error processing sound file in guild ${guildId}:`, err);
       });
-
-      ffmpeg.on('data', (chunk) => mixer.addTTSChunk(chunk));
-      ffmpeg.once('end', () => mixer.notifyTTSEnd());
-      ffmpeg.once('error', () => mixer.endSpeech());
+      return { isSpeakingNow: true, queuePosition: 0 };
     } else {
-      const ffmpeg = new prism.FFmpeg({
+      return { isSpeakingNow: false, queuePosition };
+    }
+  }
+
+  /**
+   * Processes the next speech/sound item in the guild's speech queue.
+   * @private
+   * @param {string} guildId
+   */
+  async _processSpeechQueue(guildId) {
+    const guildState = this.guilds.get(guildId);
+    if (!guildState) return;
+
+    if (guildState.speechQueue.length === 0) {
+      guildState.isSpeaking = false;
+      guildState.currentSpeech = null;
+      // If no music is playing, but there are songs waiting in the music queue, start the next song!
+      if (!guildState.isPlaying && guildState.queue.length > 0) {
+        this.playNext(guildId);
+      }
+      return;
+    }
+
+    guildState.isSpeaking = true;
+    const item = guildState.speechQueue.shift();
+    guildState.currentSpeech = item;
+
+    try {
+      if (guildState.isPlaying && guildState.activeMixer) {
+        await this._playSpeechDucked(guildState, item);
+      } else {
+        await this._playSpeechStandalone(guildState, item);
+      }
+    } catch (err) {
+      console.error(`Error playing speech item in guild ${guildId}:`, err);
+      guildState.currentSpeech = null;
+      setTimeout(() => {
+        this._processSpeechQueue(guildId);
+      }, 350);
+    }
+  }
+
+  /**
+   * Plays speech/sound over music with volume ducking.
+   * @private
+   * @param {object} guildState
+   * @param {object} item
+   */
+  async _playSpeechDucked(guildState, item) {
+    const mixer = guildState.activeMixer;
+    const guildId = guildState.channelId ? guildState.channel.guild.id : null;
+
+    if (!mixer) {
+      return this._playSpeechStandalone(guildState, item);
+    }
+
+    mixer.startSpeech();
+
+    let speechFFmpeg;
+    if (item.type === 'sound') {
+      speechFFmpeg = new prism.FFmpeg({
         args: [
           '-nostdin',
-          '-i', soundFilePath,
+          '-i', item.filePath,
           '-analyzeduration', '0',
           '-loglevel', '0',
           '-f', 's16le',
@@ -492,13 +535,103 @@ class VoiceManager {
           '-ac', '2',
         ],
       });
-      const resource = createAudioResource(ffmpeg, {
+    } else {
+      const ttsStream = await this.ttsService.getAudioStream(item.text, item.voice);
+      speechFFmpeg = new prism.FFmpeg({
+        args: [
+          '-nostdin',
+          '-analyzeduration', '0',
+          '-loglevel', '0',
+          '-f', 's16le',
+          '-ar', '48000',
+          '-ac', '2',
+        ],
+      });
+      ttsStream.on('error', (err) => {
+        console.error('TTS stream error during ducking:', err);
+        mixer.notifyTTSEnd();
+      });
+      ttsStream.pipe(speechFFmpeg);
+    }
+
+    guildState.activeSpeechFFmpeg = speechFFmpeg;
+
+    speechFFmpeg.on('data', (chunk) => {
+      mixer.addTTSChunk(chunk);
+    });
+
+    speechFFmpeg.once('error', (err) => {
+      console.error('Speech FFmpeg error during ducking:', err);
+      mixer.notifyTTSEnd();
+    });
+
+    speechFFmpeg.once('end', () => {
+      mixer.notifyTTSEnd();
+    });
+
+    // Listen for completion of this speech item
+    const onFinished = () => {
+      cleanupListeners();
+      guildState.activeSpeechFFmpeg = null;
+      guildState.currentSpeech = null;
+
+      if (guildState.speechQueue.length > 0) {
+        // Keep music ducked and immediately process next speech
+        this._processSpeechQueue(guildId);
+      } else {
+        // All speech items done, restore music volume!
+        mixer.endSpeech();
+        guildState.isSpeaking = false;
+      }
+    };
+
+    const cleanupListeners = () => {
+      mixer.removeListener('itemFinished', onFinished);
+      mixer.removeListener('error', onFinished);
+    };
+
+    mixer.once('itemFinished', onFinished);
+    mixer.once('error', onFinished);
+  }
+
+  /**
+   * Plays speech/sound standalone when no music is playing.
+   * @private
+   * @param {object} guildState
+   * @param {object} item
+   */
+  async _playSpeechStandalone(guildState, item) {
+    let resource;
+
+    if (item.type === 'sound') {
+      const ffmpeg = new prism.FFmpeg({
+        args: [
+          '-nostdin',
+          '-i', item.filePath,
+          '-analyzeduration', '0',
+          '-loglevel', '0',
+          '-f', 's16le',
+          '-ar', '48000',
+          '-ac', '2',
+        ],
+      });
+      guildState.activeSpeechFFmpeg = ffmpeg;
+      resource = createAudioResource(ffmpeg, {
         inputType: StreamType.Raw,
         inlineVolume: true,
       });
       resource.volume?.setVolume(0.5);
-      guildState.player.play(resource);
+    } else {
+      const stream = await this.ttsService.getAudioStream(item.text, item.voice);
+      resource = createAudioResource(stream, {
+        inputType: StreamType.Arbitrary,
+        inlineVolume: true,
+      });
+      resource.volume?.setVolume(0.5);
     }
+
+    guildState.currentResource = resource;
+    guildState.player.play(resource);
   }
 
   /**
@@ -616,14 +749,27 @@ class VoiceManager {
    */
   skip(guildId) {
     const guildState = this.guilds.get(guildId);
-    if (!guildState || !guildState.isPlaying) {
+    if (!guildState) {
       return null;
     }
 
-    const skipped = guildState.currentTrack;
-    this._cleanupStreams(guildState);
-    guildState.player.stop(true);
-    return skipped;
+    if (guildState.isPlaying) {
+      const skipped = guildState.currentTrack;
+      this._cleanupStreams(guildState);
+      guildState.player.stop(true);
+      return skipped;
+    }
+
+    if (guildState.isSpeaking && guildState.currentSpeech) {
+      const skipped = {
+        type: 'tts',
+        title: `Speech: "${guildState.currentSpeech.text?.slice(0, 40) || 'Sound effect'}"`,
+      };
+      guildState.player.stop(true);
+      return skipped;
+    }
+
+    return null;
   }
 
   /**
@@ -658,8 +804,11 @@ class VoiceManager {
     const guildState = this.guilds.get(guildId);
     if (guildState) {
       guildState.queue = [];
+      guildState.speechQueue = [];
       guildState.currentTrack = null;
+      guildState.currentSpeech = null;
       guildState.isPlaying = false;
+      guildState.isSpeaking = false;
       this._cleanupStreams(guildState);
       guildState.player.stop(true);
       return true;
@@ -681,6 +830,9 @@ class VoiceManager {
       isPlaying: guildState.isPlaying,
       isPaused: guildState.player.state.status === AudioPlayerStatus.Paused,
       channelName: guildState.channelName,
+      isSpeaking: guildState.isSpeaking,
+      currentSpeech: guildState.currentSpeech,
+      speechQueue: [...guildState.speechQueue],
     };
   }
 

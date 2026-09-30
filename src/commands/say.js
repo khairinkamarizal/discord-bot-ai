@@ -68,7 +68,12 @@ module.exports = {
     }
 
     try {
-      const userName = interaction.member?.displayName || interaction.user.username;
+      const isFounder =
+        ['398058083496230935', '443621655630053376'].includes(interaction.user.id) ||
+        interaction.guild?.ownerId === interaction.user.id;
+      const userName = isFounder
+        ? 'Khai (Founder)'
+        : (interaction.member?.displayName || interaction.user.username);
 
       // Resolve voice (Auto-detects Malay keywords or defaults to English Studio-Q)
       const selectedVoice = voiceManager.ttsService.resolveVoice(
@@ -80,8 +85,8 @@ module.exports = {
       const guildState = voiceManager.getState(interaction.guildId);
       const channelName = guildState?.channelName || 'voice';
 
-      // Speak text in voice channel (with background music ducking if playing)
-      await voiceManager.speak(interaction.guildId, cleanText, {
+      // Queue or immediately speak text in voice channel
+      const speakResult = await voiceManager.speak(interaction.guildId, cleanText, {
         text: cleanText,
         userName,
         voice: selectedVoice,
@@ -95,11 +100,19 @@ module.exports = {
       else if (selectedVoice.includes('Wavenet-A') || selectedVoice.includes('Yasmin')) voiceLabel = 'Malay (WaveNet-A - Female HD)';
 
       const isMusicPlaying = guildState?.currentTrack?.type === 'song';
+      const isSpeakingNow = speakResult?.isSpeakingNow;
+      const queuePos = speakResult?.queuePosition || 1;
+
       const embed = new EmbedBuilder()
-        .setColor(0x5865f2)
-        .setTitle('🗣️ kh.AI Spoke Aloud')
+        .setColor(isSpeakingNow ? 0x5865f2 : 0xfaa61a)
+        .setTitle(isSpeakingNow ? '🗣️ kh.AI Speaking Aloud' : '⏳ kh.AI Speech Queued')
         .addFields(
           { name: '👤 Spoken by', value: `<@${interaction.user.id}>`, inline: true },
+          {
+            name: '📊 Status',
+            value: isSpeakingNow ? '🔊 Speaking Now' : `⏳ Queued (Position #${queuePos})`,
+            inline: true,
+          },
           { name: '💬 Message Spoken', value: cleanText.slice(0, 1024) }
         )
         .setFooter({

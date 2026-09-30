@@ -59,7 +59,12 @@ module.exports = {
     }
 
     try {
-      const userName = interaction.member?.displayName || interaction.user.username;
+      const isFounder =
+        ['398058083496230935', '443621655630053376'].includes(interaction.user.id) ||
+        interaction.guild?.ownerId === interaction.user.id;
+      const userName = isFounder
+        ? 'Khai (Founder)'
+        : (interaction.member?.displayName || interaction.user.username);
       const sessionId = interaction.channelId || interaction.guildId || 'default';
 
       // 1. Generate concise, voice-tailored answer from Gemini addressing the user with memory
@@ -80,7 +85,7 @@ module.exports = {
       const guildState = voiceManager.getState(interaction.guildId);
       const channelName = guildState?.channelName || 'voice';
 
-      await voiceManager.speak(interaction.guildId, speechText, {
+      const speakResult = await voiceManager.speak(interaction.guildId, speechText, {
         question,
         userName,
         voice: selectedVoice,
@@ -95,12 +100,20 @@ module.exports = {
 
       // 5. Display the response embed in text chat
       const isMusicPlaying = guildState?.currentTrack?.type === 'song';
+      const isSpeakingNow = speakResult?.isSpeakingNow;
+      const queuePos = speakResult?.queuePosition || 1;
       const memoryStatus = memoryTurns > 1 ? ` • 🧠 ${memoryTurns} turns` : '';
+
       const embed = new EmbedBuilder()
-        .setColor(0x5865f2)
-        .setTitle('🎙️ kh.AI Voice Response')
+        .setColor(isSpeakingNow ? 0x5865f2 : 0xfaa61a)
+        .setTitle(isSpeakingNow ? '🎙️ kh.AI Voice Response' : '⏳ kh.AI Voice Response Queued')
         .addFields(
           { name: '👤 User', value: `<@${interaction.user.id}>`, inline: true },
+          {
+            name: '📊 Status',
+            value: isSpeakingNow ? '🔊 Speaking Now' : `⏳ Queued (Position #${queuePos})`,
+            inline: true,
+          },
           { name: '❓ Question', value: question.slice(0, 1024) },
           { name: '💬 Spoken Answer', value: rawText.slice(0, 1024) }
         )

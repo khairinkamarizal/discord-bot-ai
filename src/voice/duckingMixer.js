@@ -76,17 +76,22 @@ class DuckingMixer extends Transform {
   }
 
   /**
-   * Called when TTS stream producer finishes sending all audio chunks.
+   * Called when TTS stream producer finishes sending all audio chunks for a speech item.
    */
   notifyTTSEnd() {
     this.ttsInputEnded = true;
-    if (this.ttsBuffer.length === 0 && this.isSpeaking) {
-      this.endSpeech();
+    if (this.ttsBuffer.length === 0 && this.isSpeaking && !this.speechEndTimer) {
+      this.speechEndTimer = setTimeout(() => {
+        this.speechEndTimer = null;
+        if (this.ttsBuffer.length === 0 && this.isSpeaking) {
+          this.emit('itemFinished');
+        }
+      }, 350);
     }
   }
 
   /**
-   * Called when AI voice finishes speaking all buffered audio.
+   * Called when all speech items have completed or when cancelling speech.
    * Smoothly restores music volume back to base level.
    */
   endSpeech() {
@@ -97,6 +102,7 @@ class DuckingMixer extends Transform {
     this.isSpeaking = false;
     this.ttsInputEnded = false;
     this.fadeMusicVolume(this.baseVolume, 750);
+    this.emit('speechEnd');
   }
 
   /**
@@ -124,10 +130,11 @@ class DuckingMixer extends Transform {
       // Check if buffer just drained and all chunks were already pushed
       if (this.ttsBuffer.length === 0 && this.ttsInputEnded && this.isSpeaking && !this.speechEndTimer) {
         this.speechEndTimer = setTimeout(() => {
+          this.speechEndTimer = null;
           if (this.ttsBuffer.length === 0 && this.isSpeaking) {
-            this.endSpeech();
+            this.emit('itemFinished');
           }
-        }, 500);
+        }, 350);
       }
     }
 

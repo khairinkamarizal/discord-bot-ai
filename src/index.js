@@ -39,6 +39,9 @@ const client = new Client({
   ],
 });
 
+// Founder Discord User IDs (Khai)
+const FOUNDER_IDS = ['398058083496230935', '443621655630053376'];
+
 // Cooldown tracker for voice entrance roasts (userId -> timestamp)
 const entranceCooldowns = new Map();
 
@@ -209,49 +212,42 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
         entranceCooldowns.set(userId, now);
 
         const isFounder =
-          userId === '443621655630053376' ||
+          FOUNDER_IDS.includes(userId) ||
           newState.guild.ownerId === userId ||
           (newState.member.displayName && newState.member.displayName.toLowerCase().includes('khai'));
 
         if (isFounder) {
-          console.log(`👑 [VIP Founder] Khai entered #${newState.channel?.name}!`);
+          console.log(`👑 [VIP Founder] Khai (${userId}) entered #${newState.channel?.name}!`);
           const soundPath = path.join(__dirname, '../assets/sounds/boss-intro.mp3');
+          // Queue sound first, then royal greeting immediately behind it in speechQueue
           voiceManager.playSoundFile(guildId, soundPath).catch(() => {});
 
-          setTimeout(async () => {
-            try {
-              const bossGreets = [
-                'Perhatian semua dalam channel! The Founder, Developer, dan Big Boss kita Khairin dah masuk. Tabik hormat sikit!',
-                'Haa big boss Khai dah sampai. Ada apa-apa arahan ke bos?',
-                'All hail the founder! Khai is in the house. Welcome boss.',
-              ];
-              const greet = bossGreets[Math.floor(Math.random() * bossGreets.length)];
-              await voiceManager.speak(guildId, greet, { voice: 'ms-MY-Wavenet-B' });
-            } catch (e) {
-              console.error('Founder greeting error:', e);
-            }
-          }, 1200);
+          const bossGreets = [
+            'Perhatian semua dalam channel! The Founder, Developer, dan Big Boss kita Khairin dah masuk. Tabik hormat sikit!',
+            'Haa big boss Khai dah sampai. Ada apa-apa arahan ke bos?',
+            'All hail the founder! Khai is in the house. Welcome boss.',
+          ];
+          const greet = bossGreets[Math.floor(Math.random() * bossGreets.length)];
+          voiceManager.speak(guildId, greet, { voice: 'ms-MY-Wavenet-B', userName: 'Khai' }).catch((e) => {
+            console.error('Founder greeting error:', e);
+          });
         } else {
           const memberName = newState.member.displayName || newState.member.user.username;
           console.log(`😈 [Roast Member] ${memberName} entered #${newState.channel?.name}`);
 
-          setTimeout(async () => {
-            try {
-              const roasts = [
-                `Haa masuk pun kau ${memberName}, ingatkan dah kena culik dengan alien.`,
-                `Aduh, siapa jemput ${memberName} masuk ni? Baru je aman damai tadi.`,
-                `Eh ${memberName}, kau masuk-masuk ni dah mandi ke belum? Dari jauh dah bau hangit.`,
-                `Tengok siapa yang baru masuk, orang paling tak ada life dalam server. Welcome ${memberName}.`,
-                `Masuk pun kau ${memberName}. Ingat eh, jangan sembang merapu malam ni.`,
-                `Haa ${memberName} dah sampai. Korang sorok barang berharga cepat.`,
-                `Well well well, look who decided to show up. Welcome ${memberName}, try not to embarrass yourself today.`,
-              ];
-              const roastText = roasts[Math.floor(Math.random() * roasts.length)];
-              await voiceManager.speak(guildId, roastText, { voice: 'ms-MY-Wavenet-B' });
-            } catch (e) {
-              console.error('Member roast error:', e);
-            }
-          }, 800);
+          const roasts = [
+            `Haa masuk pun kau ${memberName}, ingatkan dah kena culik dengan alien.`,
+            `Aduh, siapa jemput ${memberName} masuk ni? Baru je aman damai tadi.`,
+            `Eh ${memberName}, kau masuk-masuk ni dah mandi ke belum? Dari jauh dah bau hangit.`,
+            `Tengok siapa yang baru masuk, orang paling tak ada life dalam server. Welcome ${memberName}.`,
+            `Masuk pun kau ${memberName}. Ingat eh, jangan sembang merapu malam ni.`,
+            `Haa ${memberName} dah sampai. Korang sorok barang berharga cepat.`,
+            `Well well well, look who decided to show up. Welcome ${memberName}, try not to embarrass yourself today.`,
+          ];
+          const roastText = roasts[Math.floor(Math.random() * roasts.length)];
+          voiceManager.speak(guildId, roastText, { voice: 'ms-MY-Wavenet-B', userName: memberName }).catch((e) => {
+            console.error('Member roast error:', e);
+          });
         }
       }
     }
@@ -284,7 +280,10 @@ client.on(Events.MessageCreate, async (message) => {
   } catch (_) {}
 
   try {
-    const userName = message.member?.displayName || message.author.username;
+    const isFounder = FOUNDER_IDS.includes(message.author.id);
+    const userName = isFounder
+      ? 'Khai (Founder & Boss)'
+      : (message.member?.displayName || message.author.username);
     const sessionId = message.channelId;
 
     const { rawText } = await aiService.askQuestion(cleanPrompt, userName, sessionId);

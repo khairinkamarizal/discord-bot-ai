@@ -12,42 +12,85 @@ module.exports = {
   async execute(interaction, { voiceManager }) {
     const queueData = voiceManager.getQueue(interaction.guildId);
 
-    if (!queueData || (!queueData.currentItem && queueData.queue.length === 0)) {
+    const hasMusic = queueData && (queueData.currentItem || queueData.queue.length > 0);
+    const hasSpeech = queueData && (queueData.currentSpeech || (queueData.speechQueue && queueData.speechQueue.length > 0));
+
+    if (!queueData || (!hasMusic && !hasSpeech)) {
       return interaction.reply({
         content: '📭 The voice queue is currently empty.',
         ephemeral: true,
       });
     }
 
-    const { currentItem, queue, isPaused, channelName } = queueData;
+    const {
+      currentItem,
+      queue,
+      isPaused,
+      channelName,
+      isSpeaking,
+      currentSpeech,
+      speechQueue,
+    } = queueData;
 
-    const currentTitle =
-      currentItem?.title || (currentItem?.type === 'tts' ? '🎙️ AI Voice Response' : 'Unknown');
+    const currentTitle = currentItem?.title || 'None';
     const currentArtist = currentItem?.author ? ` - ${currentItem.author}` : '';
     const currentDuration = currentItem?.duration ? ` [${currentItem.duration}]` : '';
 
     const embed = new EmbedBuilder()
       .setColor(0x5865f2)
-      .setTitle(`🎵 Music Queue - #${channelName}`)
-      .setDescription(
-        `**Now Playing:**\n${isPaused ? '⏸️ (Paused) ' : '▶️ '}**${currentTitle}**${currentArtist}${currentDuration}`
-      )
+      .setTitle(`🎵 Voice & Audio Queue - #${channelName}`)
       .setTimestamp();
 
+    if (currentItem) {
+      embed.setDescription(
+        `**Now Playing (Music):**\n${isPaused ? '⏸️ (Paused) ' : '▶️ '}**${currentTitle}**${currentArtist}${currentDuration}`
+      );
+    } else if (currentSpeech) {
+      const speechLabel = currentSpeech.text ? `"${currentSpeech.text.slice(0, 100)}..."` : 'Sound Effect';
+      embed.setDescription(`🗣️ **Now Speaking:** ${speechLabel}`);
+    } else {
+      embed.setDescription('Idle / No audio actively playing.');
+    }
+
+    // Speech Queue section
+    if (currentSpeech || (speechQueue && speechQueue.length > 0)) {
+      let speechList = '';
+      if (currentSpeech) {
+        const who = currentSpeech.userName ? ` *(by ${currentSpeech.userName})*` : '';
+        const what = currentSpeech.text ? `"${currentSpeech.text.slice(0, 80)}"` : 'Sound effect';
+        speechList += `🔊 **Speaking:** ${what}${who}\n`;
+      }
+      if (speechQueue && speechQueue.length > 0) {
+        speechList += speechQueue
+          .slice(0, 5)
+          .map((s, idx) => {
+            const who = s.userName ? ` *(by ${s.userName})*` : '';
+            const what = s.text ? `"${s.text.slice(0, 60)}..."` : 'Sound effect';
+            return `\`${idx + 1}.\` ${what}${who}`;
+          })
+          .join('\n');
+        if (speechQueue.length > 5) {
+          speechList += `\n*...and ${speechQueue.length - 5} more queued speech messages*`;
+        }
+      }
+      embed.addFields({ name: '🗣️ Speech Queue', value: speechList });
+    }
+
+    // Music Queue section
     if (queue.length > 0) {
       const upcomingList = queue
-        .slice(0, 10)
+        .slice(0, 8)
         .map((item, index) => {
-          const title = item.title || (item.type === 'tts' ? '🎙️ AI Voice Response' : 'Track');
+          const title = item.title || 'Track';
           const dur = item.duration ? ` \`[${item.duration}]\`` : '';
           return `\`${index + 1}.\` **${title}**${dur}`;
         })
         .join('\n');
 
-      const remaining = queue.length > 10 ? `\n*...and ${queue.length - 10} more*` : '';
-      embed.addFields({ name: 'Upcoming in Queue', value: upcomingList + remaining });
-    } else {
-      embed.addFields({ name: 'Upcoming in Queue', value: 'No more tracks queued.' });
+      const remaining = queue.length > 8 ? `\n*...and ${queue.length - 8} more tracks*` : '';
+      embed.addFields({ name: '🎵 Upcoming Music Tracks', value: upcomingList + remaining });
+    } else if (hasMusic) {
+      embed.addFields({ name: '🎵 Upcoming Music Tracks', value: 'No more tracks queued.' });
     }
 
     return interaction.reply({ embeds: [embed] });
