@@ -33,6 +33,14 @@ class DuckingMixer extends Transform {
   }
 
   /**
+   * Sets the active TTS speech voice volume.
+   * @param {number} vol - 0.01 to 1.5
+   */
+  setTTSVolume(vol) {
+    this.ttsVolume = Math.max(0.01, Math.min(1.5, vol));
+  }
+
+  /**
    * Smoothly fades the music volume to a target level over durationMs.
    * @param {number} target - Target volume (0.0 to 1.0)
    * @param {number} durationMs - Duration of fade in milliseconds

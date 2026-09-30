@@ -3,14 +3,25 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('volume')
-    .setDescription('View or change the audio volume (music & AI voice)')
+    .setDescription('View or change volume for music, voice/speech, or all audio')
     .addIntegerOption((option) =>
       option
         .setName('level')
-        .setDescription('Volume level from 1 to 100% (default is 20%)')
+        .setDescription('Volume level from 1 to 100%')
         .setMinValue(1)
         .setMaxValue(100)
         .setRequired(false)
+    )
+    .addStringOption((option) =>
+      option
+        .setName('channel')
+        .setDescription('Which audio channel to adjust (default: All / Master)')
+        .setRequired(false)
+        .addChoices(
+          { name: '🎵 Music (Songs & 24/7 Radio)', value: 'music' },
+          { name: '🗣️ Voice & Speech (/say, /ask, Entrances)', value: 'voice' },
+          { name: '🔊 All / Master (Both Music & Voice)', value: 'all' }
+        )
     ),
 
   /**
@@ -26,21 +37,42 @@ module.exports = {
     }
 
     const level = interaction.options.getInteger('level');
+    const channel = interaction.options.getString('channel') || 'all';
 
+    // If level is not specified, show current volume status dashboard
     if (level === null) {
-      const current = voiceManager.getVolume(interaction.guildId);
-      return interaction.reply({
-        content: `🔊 Current playback volume is **${current}%**.`,
-      });
+      const vols = voiceManager.getVolumes(interaction.guildId);
+      const embed = new EmbedBuilder()
+        .setColor(0x5865f2)
+        .setTitle('🔊 Current Audio Volume Levels')
+        .addFields(
+          { name: '🎵 Music Volume', value: `**${vols.music}%**`, inline: true },
+          { name: '🗣️ Voice & Speech Volume', value: `**${vols.voice}%**`, inline: true }
+        )
+        .setFooter({
+          text: 'To adjust, run: /volume level: <1-100> [channel: Music / Voice / All]',
+        })
+        .setTimestamp();
+
+      return interaction.reply({ embeds: [embed] });
     }
 
-    const newVolume = voiceManager.setVolume(interaction.guildId, level / 100);
+    // Set new volume for selected channel or both
+    const updated = voiceManager.setVolume(interaction.guildId, level / 100, channel);
+
+    let channelLabel = '🔊 All / Master (Music & Voice)';
+    if (channel === 'music') channelLabel = '🎵 Music (Songs & Radio)';
+    else if (channel === 'voice') channelLabel = '🗣️ Voice & Speech (/say, /ask, Entrances)';
 
     const embed = new EmbedBuilder()
       .setColor(0x5865f2)
-      .setTitle('🔊 Volume Adjusted')
-      .setDescription(`Playback volume set to **${newVolume}%**.`)
-      .setFooter({ text: 'Applies to music, background ducking, and AI voice responses' })
+      .setTitle(`🔊 Volume Adjusted: ${channelLabel}`)
+      .setDescription(`Target level set to **${level}%**.`)
+      .addFields(
+        { name: '🎵 Music Volume', value: `**${updated.music}%**`, inline: true },
+        { name: '🗣️ Voice & Speech Volume', value: `**${updated.voice}%**`, inline: true }
+      )
+      .setFooter({ text: 'Changes apply in real-time to active and upcoming playback' })
       .setTimestamp();
 
     return interaction.reply({ embeds: [embed] });

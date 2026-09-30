@@ -154,7 +154,9 @@ class VoiceManager {
       activeMixer: null,
       musicFFmpeg: null,
       currentResource: null,
-      volume: 0.20, // 20% comfortable default music volume
+      musicVolume: 0.20, // 20% comfortable default music volume
+      voiceVolume: 0.50, // 50% comfortable default voice/speech volume
+      volume: 0.20, // legacy fallback
       isPlaying: false,
       channelId: channel.id,
       channelName: channel.name,
@@ -558,6 +560,9 @@ class VoiceManager {
 
     let speechFFmpeg;
     if (item.type === 'mixed') {
+      const bgmVol = (guildState.musicVolume ?? 0.35).toFixed(2);
+      const voiceVol = ((guildState.voiceVolume ?? 0.50) * 2.4).toFixed(2);
+      const delayMs = item.voiceDelayMs ?? 2000;
       const ttsStream = await this.ttsService.getAudioStream(item.text, item.voice);
       speechFFmpeg = new prism.FFmpeg({
         args: [
@@ -565,7 +570,7 @@ class VoiceManager {
           '-i', item.bgmFilePath,
           '-f', 'mp3',
           '-i', 'pipe:0',
-          '-filter_complex', '[0:a]volume=0.35[bgm];[1:a]volume=1.2[voice];[bgm][voice]amix=inputs=2:duration=longest',
+          '-filter_complex', `[0:a]volume=${bgmVol}[bgm];[1:a]volume=${voiceVol},adelay=${delayMs}|${delayMs}[voice];[bgm][voice]amix=inputs=2:duration=longest`,
           '-f', 's16le',
           '-ar', '48000',
           '-ac', '2',
@@ -657,6 +662,9 @@ class VoiceManager {
     let resource;
 
     if (item.type === 'mixed') {
+      const bgmVol = (guildState.musicVolume ?? 0.35).toFixed(2);
+      const voiceVol = ((guildState.voiceVolume ?? 0.50) * 2.4).toFixed(2);
+      const delayMs = item.voiceDelayMs ?? 2000;
       const ttsStream = await this.ttsService.getAudioStream(item.text, item.voice);
       const ffmpeg = new prism.FFmpeg({
         args: [
@@ -664,7 +672,7 @@ class VoiceManager {
           '-i', item.bgmFilePath,
           '-f', 'mp3',
           '-i', 'pipe:0',
-          '-filter_complex', '[0:a]volume=0.35[bgm];[1:a]volume=1.2[voice];[bgm][voice]amix=inputs=2:duration=longest',
+          '-filter_complex', `[0:a]volume=${bgmVol}[bgm];[1:a]volume=${voiceVol},adelay=${delayMs}|${delayMs}[voice];[bgm][voice]amix=inputs=2:duration=longest`,
           '-f', 's16le',
           '-ar', '48000',
           '-ac', '2',
@@ -697,14 +705,14 @@ class VoiceManager {
         inputType: StreamType.Raw,
         inlineVolume: true,
       });
-      resource.volume?.setVolume(0.5);
+      resource.volume?.setVolume(guildState.voiceVolume ?? 0.5);
     } else {
       const stream = await this.ttsService.getAudioStream(item.text, item.voice);
       resource = createAudioResource(stream, {
         inputType: StreamType.Arbitrary,
         inlineVolume: true,
       });
-      resource.volume?.setVolume(0.5);
+      resource.volume?.setVolume(guildState.voiceVolume ?? 0.5);
     }
 
     guildState.currentResource = resource;
@@ -750,8 +758,8 @@ class VoiceManager {
           }
         }
 
-        // Create DuckingMixer to allow real-time background voice ducking with configured volume
-        const mixer = new DuckingMixer(guildState.volume ?? 0.20, 0.40);
+        // Create DuckingMixer to allow real-time background voice ducking with configured volumes
+        const mixer = new DuckingMixer(guildState.musicVolume ?? 0.20, guildState.voiceVolume ?? 0.50);
         guildState.activeMixer = mixer;
 
         // Build FFmpeg args using system ffmpeg with -nostdin to prevent blocking
@@ -940,35 +948,64 @@ class VoiceManager {
    * Sets playback volume for a guild (0.01 to 1.0).
    * @param {string} guildId
    * @param {number} volume - Float between 0.01 and 1.0
-   * @returns {number} The updated volume percentage (1 to 100)
+   * @param {'music'|'voice'|'all'} [channel='all']
+   * @returns {{ music: number, voice: number }}
    */
-  setVolume(guildId, volume) {
+  setVolume(guildId, volume, channel = 'all') {
     const guildState = this.guilds.get(guildId);
     if (!guildState) {
       throw new Error('Bot is not connected to a voice channel.');
     }
 
     const clamped = Math.max(0.01, Math.min(1.0, volume));
-    guildState.volume = clamped;
 
-    if (guildState.activeMixer) {
-      guildState.activeMixer.setBaseVolume(clamped);
-    }
-    if (guildState.currentResource?.volume) {
-      guildState.currentResource.volume.setVolume(clamped);
+    if (channel === 'music' || channel === 'all') {
+      guildState.musicVolume = clamped;
+      guildState.volume = clamped;
+      if (guildState.activeMixer) {
+        guildState.activeMixer.setBaseVolume(clamped);
+      }
+      if (guildState.currentResource?.volume && guildState.isPlaying) {
+        guildState.currentResource.volume.setVolume(clamped);
+      }
     }
 
-    return Math.round(clamped * 100);
+    if (channel === 'voice' || channel === 'all') {
+      guildState.voiceVolume = clamped;
+      if (guildState.activeMixer) {
+        guildState.activeMixer.setTTSVolume(clamped);
+      }
+      if (guildState.currentResource?.volume && guildState.isSpeaking) {
+        guildState.currentResource.volume.setVolume(clamped);
+      }
+    }
+
+    return {
+      music: Math.round((guildState.musicVolume ?? 0.20) * 100),
+      voice: Math.round((guildState.voiceVolume ?? 0.50) * 100),
+    };
   }
 
   /**
-   * Gets current volume percentage for a guild.
+   * Gets current volume percentages for a guild.
+   * @param {string} guildId
+   * @returns {{ music: number, voice: number }}
+   */
+  getVolumes(guildId) {
+    const guildState = this.guilds.get(guildId);
+    return {
+      music: Math.round((guildState?.musicVolume ?? 0.20) * 100),
+      voice: Math.round((guildState?.voiceVolume ?? 0.50) * 100),
+    };
+  }
+
+  /**
+   * Gets current music volume percentage for a guild.
    * @param {string} guildId
    * @returns {number} Percentage (1 to 100)
    */
   getVolume(guildId) {
-    const guildState = this.guilds.get(guildId);
-    return Math.round((guildState?.volume ?? 0.20) * 100);
+    return this.getVolumes(guildId).music;
   }
 }
 
