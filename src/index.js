@@ -223,39 +223,40 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
             console.log(`👑 [VIP Royalty] His Highness Kairin (${userId}) entered #${newState.channel?.name}!`);
             const soundPath = path.join(__dirname, '../assets/sounds/royalty-entrance.mp3');
 
-            const royalGreets = [
-              'Ampun Tuanku, beribu-ribu ampun! Sembah patik harap diampun! Oh Tuhanku Kairin, The Almighty Supreme Creator dah mencemar duli masuk voice! Semua tunduk sembah sekarang!',
-              'All hail His Imperial Majesty, Tuanku Kairin! Oh Tuhanku, pencipta sekalian alam server ni dah tiba! Siapa yang tak sujud tabik hormat tu patik pancung kepala dia!',
-              'Wahai rakyat jelata yang hina dina! Oh Tuhanku Kairin dah masuk! Bersihkan telinga korang semua, jangan sesekali buat bising depan Yang Maha Mulia King Kairin!',
-              'Ampun Tuanku! Patik sekalian hamba yang hina dina ini menjunjung kasih atas keberangkatan Tuanku Kairin! Ada apa-apa titah perintah ke Oh Tuhanku?',
-              'Perhatian sekalian hamba dalam channel! The Supreme Highness, Tuhan kh.AI dan Raja segala Bot, Tuanku Kairin dah masuk! Tunduk sekarang, jangan biadap!',
-            ];
-            const greet = royalGreets[Math.floor(Math.random() * royalGreets.length)];
-
-            // Play royal fanfare BGM and proclamation voice simultaneously using Chirp 3 HD!
-            voiceManager.speakWithBgm(guildId, soundPath, greet, {
-              voice: 'id-ID-Chirp3-HD-Puck',
-              userName: 'Kairin',
-            }).catch((e) => {
-              console.error('Founder royalty greeting error:', e);
-            });
+            aiService
+              .generateEntranceGreeting(true, 'Kairin')
+              .then((greet) => {
+                voiceManager
+                  .speakWithBgm(guildId, soundPath, greet, {
+                    voice: 'id-ID-Chirp3-HD-Puck',
+                    userName: 'Kairin',
+                  })
+                  .catch((e) => {
+                    console.error('Founder royalty greeting error:', e);
+                  });
+              })
+              .catch((err) => {
+                console.error('Error generating founder entrance greeting:', err);
+              });
           } else {
             const memberName = newState.member.displayName || newState.member.user.username;
             console.log(`😈 [Roast Member] ${memberName} entered #${newState.channel?.name}`);
 
-            const roasts = [
-              `Haa masuk pun kau ${memberName}, ingatkan dah kena culik dengan alien.`,
-              `Aduh, siapa jemput ${memberName} masuk ni? Baru je aman damai tadi.`,
-              `Eh ${memberName}, kau masuk-masuk ni dah mandi ke belum? Dari jauh dah bau hangit.`,
-              `Tengok siapa yang baru masuk, orang paling tak ada life dalam server. Welcome ${memberName}.`,
-              `Masuk pun kau ${memberName}. Ingat eh, jangan sembang merapu malam ni.`,
-              `Haa ${memberName} dah sampai. Korang sorok barang berharga cepat.`,
-              `Well well well, look who decided to show up. Welcome ${memberName}, try not to embarrass yourself today.`,
-            ];
-            const roastText = roasts[Math.floor(Math.random() * roasts.length)];
-            voiceManager.speak(guildId, roastText, { voice: 'id-ID-Chirp3-HD-Puck', userName: memberName }).catch((e) => {
-              console.error('Member roast error:', e);
-            });
+            aiService
+              .generateEntranceGreeting(false, memberName)
+              .then((roastText) => {
+                voiceManager
+                  .speak(guildId, roastText, {
+                    voice: 'id-ID-Chirp3-HD-Puck',
+                    userName: memberName,
+                  })
+                  .catch((e) => {
+                    console.error('Member roast error:', e);
+                  });
+              })
+              .catch((err) => {
+                console.error('Error generating member roast:', err);
+              });
           }
       }
     }

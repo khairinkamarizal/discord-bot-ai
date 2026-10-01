@@ -490,6 +490,54 @@ Creative Rules:
     console.error('Gemini Image Generation Error:', lastError);
     throw lastError || new Error('Failed to generate image with available models.');
   }
+
+  /**
+   * Generates a completely unique, dynamic voice entrance proclamation or roast.
+   * If isFounder: Grand, dramatic, imperial royal proclamation addressing His Highness Tuanku Khairin.
+   * If regular member: Short, funny, witty urban Malaysian burn/roast.
+   * @param {boolean} isFounder
+   * @param {string} memberName
+   * @returns {Promise<string>}
+   */
+  async generateEntranceGreeting(isFounder, memberName = 'member') {
+    const cleanName = memberName.replace(/[@#*`_~]/g, '').trim() || 'member';
+
+    const prompt = isFounder
+      ? `Generate a 1 to 2 sentence grand, dramatic, exaggerated imperial royal proclamation in Malay and English announcing the arrival of His Highness Tuanku Khairin (The Supreme Founder, Sovereign Ruler, and Creator of this server). Khai is not your friend; you must treat His Highness with supreme royal reverence, awe, and obedience (Ampun Tuanku, sembah patik, commanding all subjects in voice chat to bow and pay homage). Strictly plain spoken text, no emojis, no stage directions, no asterisks, no quotes.`
+      : `Generate a 1-sentence hilarious, dry, deadpan entrance roast for a Discord member named ${cleanName} who just hopped into voice chat. Use subtle urban Malaysian slang (funny-rude, unbothered, deadpan sarcasm, e.g. lepak, bau hangit, takde life, sembang). Strictly 1 punchy spoken sentence, no emojis, no asterisks, no quotes.`;
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model: this.modelName,
+        contents: prompt,
+        config: {
+          temperature: 1.0, // High temperature for fresh uniqueness each time
+        },
+      });
+
+      const text = cleanTextForSpeech(response.text?.trim() || '');
+      if (text) return text;
+    } catch (err) {
+      console.warn('Failed to dynamically generate entrance greeting, falling back:', err.message);
+    }
+
+    if (isFounder) {
+      const fallbacks = [
+        'Ampun Tuanku, beribu-ribu ampun! Sembah patik harap diampun! His Highness Tuanku Kairin, The Supreme Founder dah mencemar duli masuk voice! Semua tunduk sembah sekarang!',
+        'All hail His Imperial Majesty, Tuanku Kairin! Pencipta sekalian alam server ni dah tiba! Siapa yang tak sujud tabik hormat tu patik pancung kepala dia!',
+        'Perhatian sekalian hamba dalam channel! The Supreme Highness, Tuanku Kairin dah masuk! Tunduk sekarang, jangan sesekali biadap depan Yang Maha Mulia!',
+      ];
+      return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    } else {
+      const fallbacks = [
+        `Haa masuk pun kau ${cleanName}, ingatkan dah kena culik dengan alien.`,
+        `Aduh, siapa jemput ${cleanName} masuk ni? Baru je aman damai tadi.`,
+        `Eh ${cleanName}, kau masuk-masuk ni dah mandi ke belum? Dari jauh dah bau hangit.`,
+        `Tengok siapa yang baru masuk, orang paling tak ada life dalam server. Welcome ${cleanName}.`,
+      ];
+      return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    }
+  }
 }
 
 module.exports = {
