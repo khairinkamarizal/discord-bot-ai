@@ -40,8 +40,20 @@ const client = new Client({
   ],
 });
 
-// Founder Discord User IDs (Khai)
-const FOUNDER_IDS = ['398058083496230935', '443621655630053376'];
+const {
+  getKhaiGreeting,
+  getHazimGreeting,
+  getMemberRoast,
+} = require('./voice/entranceGreetings');
+
+// Supreme Founder (Khai)
+const KHAI_IDS = ['398058083496230935'];
+
+// Co-Founder / Malaikat Server (Hazim)
+const HAZIM_IDS = ['1042669900428222474', '443621655630053376'];
+
+// Combined Founder IDs
+const FOUNDER_IDS = [...KHAI_IDS, ...HAZIM_IDS];
 
 // Cooldown tracker for voice entrance roasts (userId -> timestamp)
 const entranceCooldowns = new Map();
@@ -210,55 +222,61 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
       const now = Date.now();
       const lastGreet = entranceCooldowns.get(userId) || 0;
 
-        const isFounder =
-          FOUNDER_IDS.includes(userId) ||
-          newState.guild.ownerId === userId ||
+        const isKhai =
+          KHAI_IDS.includes(userId) ||
           (newState.member.displayName && newState.member.displayName.toLowerCase().includes('khai'));
 
-        const cooldownTime = isFounder ? 20_000 : 45_000;
+        const isHazim =
+          HAZIM_IDS.includes(userId) ||
+          (newState.member.displayName && newState.member.displayName.toLowerCase().includes('hazim'));
+
+        const isFounder = isKhai || isHazim || newState.guild.ownerId === userId;
+
+        const cooldownTime = isFounder ? 15_000 : 45_000;
         if (now - lastGreet > cooldownTime) {
           entranceCooldowns.set(userId, now);
 
-          if (isFounder) {
-            console.log(`👑 [VIP Royalty] His Highness Kairin (${userId}) entered #${newState.channel?.name}!`);
+          if (isKhai) {
+            console.log(`👑 [VIP Royalty] His Highness Khai (${userId}) entered #${newState.channel?.name}!`);
             const soundPath = path.join(__dirname, '../assets/sounds/royalty-entrance.mp3');
+            const greet = getKhaiGreeting();
 
-            aiService
-              .generateEntranceGreeting(true, 'Kairin')
-              .then((greet) => {
-                voiceManager
-                  .speakWithBgm(guildId, soundPath, greet, {
-                    voice: 'id-ID-Chirp3-HD-Puck',
-                    userName: 'Kairin',
-                  })
-                  .catch((e) => {
-                    console.error('Founder royalty greeting error:', e);
-                  });
+            voiceManager
+              .speakWithBgm(guildId, soundPath, greet, {
+                voice: 'id-ID-Chirp3-HD-Puck',
+                userName: 'Kairin',
               })
-              .catch((err) => {
-                console.error('Error generating founder entrance greeting:', err);
+              .catch((e) => {
+                console.error('Khai royalty greeting error:', e);
+              });
+          } else if (isHazim) {
+            console.log(`🪽 [Malaikat Server] Co-Founder Hazim (${userId}) entered #${newState.channel?.name}!`);
+            const soundPath = path.join(__dirname, '../assets/sounds/royalty-entrance.mp3');
+            const greet = getHazimGreeting();
+
+            voiceManager
+              .speakWithBgm(guildId, soundPath, greet, {
+                voice: 'id-ID-Chirp3-HD-Puck',
+                userName: 'Hazim',
+              })
+              .catch((e) => {
+                console.error('Hazim Malaikat greeting error:', e);
               });
           } else {
             const memberName = newState.member.displayName || newState.member.user.username;
             console.log(`😈 [Roast Member] ${memberName} entered #${newState.channel?.name}`);
+            const roastText = getMemberRoast(memberName);
 
-            aiService
-              .generateEntranceGreeting(false, memberName)
-              .then((roastText) => {
-                voiceManager
-                  .speak(guildId, roastText, {
-                    voice: 'id-ID-Chirp3-HD-Puck',
-                    userName: memberName,
-                  })
-                  .catch((e) => {
-                    console.error('Member roast error:', e);
-                  });
+            voiceManager
+              .speak(guildId, roastText, {
+                voice: 'id-ID-Chirp3-HD-Puck',
+                userName: memberName,
               })
-              .catch((err) => {
-                console.error('Error generating member roast:', err);
+              .catch((e) => {
+                console.error('Member roast error:', e);
               });
           }
-      }
+        }
     }
   }
 });
