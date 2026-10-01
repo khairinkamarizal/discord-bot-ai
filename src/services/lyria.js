@@ -84,34 +84,48 @@ class LyriaService {
   }
 
   /**
-   * Builds an optimized text prompt for Google Lyria 3 based on mode and inputs.
+   * Builds an optimized text prompt for Google Lyria 3 based on mode, genre, mood, vocal, and inputs.
    */
-  buildPrompt(mode, topic, target) {
-    const isMalay = /[\b(aku|kau|dia|kami|kita|orang|lepak|mamak|makan|kawan|member|nak|tak|dah|pun|je|weh|bodo|seratus|hujan|malam|petang|rojak|teh|kopi|nasi|lemak)\b]/i.test(
-      `${topic} ${target || ''}`
+  buildPrompt({ mode = 'sing', topic, target, genre, mood, vocal }) {
+    const isMalay = /[\b(aku|kau|dia|kami|kita|orang|lepak|mamak|makan|kawan|member|nak|tak|dah|pun|je|weh|bodo|seratus|hujan|malam|petang|rojak|teh|kopi|nasi|lemak|rindu|sayang|cinta)\b]/i.test(
+      `${topic} ${target || ''} ${genre || ''}`
     );
+
+    // If custom genre is provided, prioritize it
+    if (genre && genre.trim()) {
+      const g = genre.trim();
+      const m = mood ? `${mood} ` : '';
+      const v = vocal ? `${vocal} ` : 'expressive vocals ';
+      let p = `A ${m}${g} track featuring ${v}singing with catchy melodic phrasing and authentic production about ${topic}`;
+      if (target) p += `, dedicated to ${target}`;
+      if (isMalay) p += '. Incorporate Malaysian nuances, flow, and cultural feel naturally into the track.';
+      return p;
+    }
+
+    const vocalStyle = vocal || (mode === 'rap' || mode === 'diss' ? 'male rapper' : 'male singer');
+    const moodStyle = mood ? `${mood} ` : '';
 
     let prompt = '';
     switch (mode) {
       case 'rap':
-        prompt = `A 90s boom-bap hip-hop track at 90-95 BPM with punchy 12-bit MPC drum break, Fender Rhodes electric piano, deep upright bassline, and a confident rapper spitting rhythmic rhyming bars about ${topic}`;
+        prompt = `A ${moodStyle}90s boom-bap hip-hop track at 90-95 BPM with punchy 12-bit MPC drum break, Fender Rhodes electric piano, deep upright bassline, and a confident ${vocalStyle} spitting rhythmic rhyming bars about ${topic}`;
         if (target) prompt += `, with clever punchlines dedicated to ${target}`;
         if (isMalay) prompt += '. Blend urban Malaysian slang and culture naturally into the lyrics.';
         break;
 
       case 'diss':
-        prompt = `A hard-hitting modern trap hip-hop track with heavy 808 bass, punchy drums, and a charismatic rapper spitting clever, witty roast bars about ${target ? `${target} (${topic})` : topic}`;
+        prompt = `A ${moodStyle}hard-hitting modern trap hip-hop track with heavy 808 bass, punchy drums, and a charismatic ${vocalStyle} spitting clever, witty roast bars about ${target ? `${target} (${topic})` : topic}`;
         if (isMalay) prompt += '. Keep the diss playful, funny, and rooted in Malaysian banter.';
         break;
 
       case 'poem':
-        prompt = `An atmospheric neo-soul and lofi jazz track with lush electric piano chords, soft vinyl warmth, and a spoken-word artist reciting poetic rhythmic verses about ${topic}`;
+        prompt = `A ${moodStyle}atmospheric neo-soul and lofi jazz track with lush electric piano chords, soft vinyl warmth, and a ${vocalStyle} reciting poetic rhythmic verses about ${topic}`;
         if (isMalay) prompt += ' formatted as modern Malay pantun and poetry.';
         break;
 
       case 'sing':
       default:
-        prompt = `A soulful acoustic pop and R&B ballad with warm acoustic guitar chords, gentle percussion, and an emotional singer delivering a catchy melodic vocal performance about ${topic}`;
+        prompt = `A ${moodStyle}soulful acoustic pop and R&B ballad with warm acoustic guitar chords, gentle percussion, and an emotional ${vocalStyle} delivering a catchy melodic vocal performance about ${topic}`;
         if (target) prompt += ` dedicated to ${target}`;
         if (isMalay) prompt += '. Sing with heartfelt Malaysian feeling and acoustic soul vibe.';
         break;
@@ -126,10 +140,13 @@ class LyriaService {
    * @param {'sing'|'rap'|'diss'|'poem'} [options.mode='sing']
    * @param {string} options.topic
    * @param {string} [options.target]
+   * @param {string} [options.genre]
+   * @param {string} [options.mood]
+   * @param {string} [options.vocal]
    * @param {string} [options.customPrompt]
    * @returns {Promise<{ audioPath: string, timedLyrics: string, cleanLyrics: string, caption: string, bpm: string, audioBuffer: Buffer }>}
    */
-  async generateSong({ mode = 'sing', topic, target, customPrompt }) {
+  async generateSong({ mode = 'sing', topic, target, genre, mood, vocal, customPrompt }) {
     this._cleanupOldTempFiles();
 
     const accessToken = await this._getAccessToken();
@@ -139,7 +156,8 @@ class LyriaService {
       throw new Error('GCP_PROJECT_ID is not configured.');
     }
 
-    const promptText = customPrompt || this.buildPrompt(mode, topic, target);
+    const promptText =
+      customPrompt || this.buildPrompt({ mode, topic, target, genre, mood, vocal });
     const url = `https://aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/global/interactions`;
 
     console.log(`🎵 [Lyria 3] Requesting song generation for mode "${mode}": "${promptText.slice(0, 100)}..."`);

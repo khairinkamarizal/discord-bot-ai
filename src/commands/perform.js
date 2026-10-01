@@ -3,12 +3,24 @@ const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require('discor
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('perform')
-    .setDescription('Make kh.AI perform a live song, rap, diss track, or spoken word with Google Lyria 3')
+    .setDescription('Make kh.AI compose and perform a live track with Google Lyria 3')
+    .addStringOption((option) =>
+      option
+        .setName('topic')
+        .setDescription('What should the track be about?')
+        .setRequired(true)
+    )
+    .addStringOption((option) =>
+      option
+        .setName('genre')
+        .setDescription('Optional: Any music genre (e.g. 90s Slow Rock Kapak, UK Drill, City Pop, Phonk, Dangdut, R&B)')
+        .setRequired(false)
+    )
     .addStringOption((option) =>
       option
         .setName('mode')
-        .setDescription('Choose performance style')
-        .setRequired(true)
+        .setDescription('Optional: Preset style (ignored if custom genre is specified)')
+        .setRequired(false)
         .addChoices(
           { name: 'Melodic Song (Acoustic / R&B ballad with real vocals)', value: 'sing' },
           { name: 'Freestyle Rap (90s Boom-Bap MPC hip-hop bars & beat)', value: 'rap' },
@@ -18,9 +30,30 @@ module.exports = {
     )
     .addStringOption((option) =>
       option
-        .setName('topic')
-        .setDescription('What should the track be about?')
-        .setRequired(true)
+        .setName('mood')
+        .setDescription('Optional: Vibe or emotional tone')
+        .setRequired(false)
+        .addChoices(
+          { name: 'Dramatic & Emotional', value: 'dramatic and emotional' },
+          { name: 'Chill & Laid-back', value: 'chill and laid-back' },
+          { name: 'Hype & Energetic', value: 'hype and energetic' },
+          { name: 'Unhinged & Chaotic', value: 'unhinged and chaotic' },
+          { name: 'Romantic & Sweet', value: 'romantic and sweet' }
+        )
+    )
+    .addStringOption((option) =>
+      option
+        .setName('vocal')
+        .setDescription('Optional: Vocal performer persona')
+        .setRequired(false)
+        .addChoices(
+          { name: 'Male Singer', value: 'male singer' },
+          { name: 'Female Singer', value: 'female singer' },
+          { name: 'Male Rapper', value: 'male rapper' },
+          { name: 'Female Rapper', value: 'female rapper' },
+          { name: 'Acoustic Duet', value: 'duet' },
+          { name: 'Spoken Word', value: 'spoken-word artist' }
+        )
     )
     .addStringOption((option) =>
       option
@@ -44,8 +77,11 @@ module.exports = {
    * @param {{ voiceManager: import('../voice/player').VoiceManager, aiService: import('../services/ai').AIService, lyriaService: import('../services/lyria').LyriaService }} services
    */
   async execute(interaction, { voiceManager, aiService, lyriaService }) {
-    const mode = interaction.options.getString('mode');
     const topic = interaction.options.getString('topic');
+    const genre = interaction.options.getString('genre');
+    const mode = interaction.options.getString('mode') || 'sing';
+    const mood = interaction.options.getString('mood');
+    const vocal = interaction.options.getString('vocal');
     const target = interaction.options.getString('target');
     const engine = interaction.options.getString('engine') || 'lyria';
 
@@ -78,26 +114,36 @@ module.exports = {
     const guildState = voiceManager.getState(interaction.guildId);
     const channelName = guildState?.channelName || 'voice';
 
-    // Mode labels for embeds
+    // Friendly mode / genre labels for embeds
     const modeLabels = {
       sing: 'Acoustic / Melodic Soul Ballad',
       rap: '90s Boom-Bap Hip-Hop',
       diss: '808 Trap Diss Track',
       poem: 'Atmospheric Neo-Soul & Spoken Word',
     };
-    const modeTitle = modeLabels[mode] || 'Studio Track';
+    const styleDisplay = genre
+      ? `${genre}${mood ? ` (${mood})` : ''}`
+      : `${modeLabels[mode] || 'Studio Track'}${mood ? ` (${mood})` : ''}`;
 
     // -------------------------------------------------------------
     // ENGINE: Google Lyria 3 (Real Music, Melody, Vocals & Beats)
     // -------------------------------------------------------------
     if (engine === 'lyria' && lyriaService) {
       try {
-        const song = await lyriaService.generateSong({ mode, topic, target });
+        const song = await lyriaService.generateSong({
+          mode,
+          topic,
+          target,
+          genre,
+          mood,
+          vocal,
+        });
 
         // Play the generated stereo MP3 track into the voice channel
         const playResult = await voiceManager.playPerformance(interaction.guildId, song.audioPath, {
-          title: `Lyria: ${modeTitle}`,
+          title: `Lyria: ${styleDisplay}`,
           mode,
+          genre,
           topic,
           userName: interaction.member?.displayName || interaction.user.username,
         });
@@ -111,7 +157,7 @@ module.exports = {
           .setAuthor({ name: 'kh.AI Studio' })
           .setTitle(isSpeakingNow ? 'VOCAL PERFORMANCE' : 'VOCAL PERFORMANCE QUEUED')
           .addFields(
-            { name: 'STYLE', value: modeTitle, inline: true },
+            { name: 'STYLE', value: styleDisplay, inline: true },
             {
               name: 'STATUS',
               value: isSpeakingNow ? 'Live on Voice' : `Queued (#${queuePos})`,
@@ -124,6 +170,10 @@ module.exports = {
             }
           );
 
+        if (vocal) {
+          embed.addFields({ name: 'VOCALS', value: vocal, inline: true });
+        }
+
         if (song.cleanLyrics) {
           embed.addFields({
             name: 'LYRICS',
@@ -133,7 +183,6 @@ module.exports = {
         }
 
         if (song.caption) {
-          // Truncate caption cleanly to fit embed limits
           const cleanCaption = song.caption.replace(/^Caption:\s*/i, '').trim();
           embed.addFields({
             name: 'PRODUCTION',
@@ -150,8 +199,9 @@ module.exports = {
           .setTimestamp();
 
         // Attach generated MP3 file so users can replay or download in chat
+        const safeName = (genre || mode).toLowerCase().replace(/[^a-z0-9]+/g, '_');
         const attachment = new AttachmentBuilder(song.audioPath, {
-          name: `${mode}_${Date.now()}.mp3`,
+          name: `${safeName}_${Date.now()}.mp3`,
         });
 
         return interaction.editReply({
@@ -160,9 +210,8 @@ module.exports = {
         });
       } catch (lyriaErr) {
         console.error('Google Lyria 3 error in /perform:', lyriaErr);
-        // If Lyria fails (e.g. copyright recitation check or quota), provide clean diagnostic
         return interaction.editReply({
-          content: `Vocal generation failed: ${lyriaErr.message || 'Unknown error'}. You can try changing the topic or run with \`engine: Chirp 3 HD\` for speech recitation.`,
+          content: `Vocal generation failed: ${lyriaErr.message || 'Unknown error'}. You can try modifying the genre/topic or run with \`engine: Chirp 3 HD\` for speech recitation.`,
         });
       }
     }
@@ -204,7 +253,7 @@ module.exports = {
         .setAuthor({ name: 'kh.AI Studio' })
         .setTitle(isSpeakingNow ? 'VOCAL PERFORMANCE' : 'VOCAL PERFORMANCE QUEUED')
         .addFields(
-          { name: 'STYLE', value: `${modeTitle} (Speech Recitation)`, inline: true },
+          { name: 'STYLE', value: `${styleDisplay} (Speech Recitation)`, inline: true },
           {
             name: 'STATUS',
             value: isSpeakingNow ? 'Live on Voice' : `Queued (#${queuePos})`,

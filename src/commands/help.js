@@ -21,7 +21,7 @@ module.exports = {
           name: 'VOICE & INTELLIGENCE',
           value:
             '`/ask <question> [voice]`\nInquire aloud in the voice channel with natural dialogue.\n\n' +
-            '`/perform <mode> <topic> [target]`\nCompose and perform studio tracks (song, rap, diss, poetry) with Google Lyria 3.\n\n' +
+            '`/perform <topic> [genre] [mode] [mood] [vocal] [target]`\nCompose studio songs across any genre (Rock Kapak, UK Drill, City Pop, R&B) with Lyria 3.\n\n' +
             '`/say <text> [voice]`\nRender custom text into speech in your voice channel.\n\n' +
             '`/imagine <prompt> [reference]`\nSynthesize visuals from text or transform reference images.\n\n' +
             '`/roastmode <on|off>`\nToggle ambient voice greetings upon channel entry.\n\n' +
