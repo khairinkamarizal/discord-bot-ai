@@ -23,6 +23,7 @@ prism.FFmpeg.getInfo = () => ({
 const { VoiceManager } = require('./voice/player');
 const { AIService } = require('./services/ai');
 const { MusicService } = require('./services/music');
+const { LyriaService } = require('./services/lyria');
 
 // Ensure token is provided
 if (!process.env.DISCORD_TOKEN) {
@@ -51,6 +52,7 @@ client.commands = new Collection();
 const voiceManager = new VoiceManager();
 const aiService = new AIService();
 const musicService = new MusicService(client);
+const lyriaService = new LyriaService();
 voiceManager.setMusicService(musicService);
 
 // Load commands from commands directory
@@ -142,6 +144,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       voiceManager,
       aiService,
       musicService,
+      lyriaService,
     });
   } catch (error) {
     console.error(`Error executing /${interaction.commandName}:`, error);

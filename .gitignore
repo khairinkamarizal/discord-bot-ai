@@ -10,3 +10,5 @@ yarn-error.log*
 .DS_Store
 dist/
 voice-state.json
+scratch/
+temp/
