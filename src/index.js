@@ -229,31 +229,31 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
             ];
             const greet = royalGreets[Math.floor(Math.random() * royalGreets.length)];
 
-            // Play royal fanfare BGM and proclamation voice simultaneously with NO delay!
+            // Play royal fanfare BGM and proclamation voice simultaneously using Chirp 3 HD!
             voiceManager.speakWithBgm(guildId, soundPath, greet, {
-              voice: 'ms-MY-Wavenet-B',
+              voice: 'id-ID-Chirp3-HD-Puck',
               userName: 'Kairin',
             }).catch((e) => {
               console.error('Founder royalty greeting error:', e);
             });
           } else {
-          const memberName = newState.member.displayName || newState.member.user.username;
-          console.log(`😈 [Roast Member] ${memberName} entered #${newState.channel?.name}`);
+            const memberName = newState.member.displayName || newState.member.user.username;
+            console.log(`😈 [Roast Member] ${memberName} entered #${newState.channel?.name}`);
 
-          const roasts = [
-            `Haa masuk pun kau ${memberName}, ingatkan dah kena culik dengan alien.`,
-            `Aduh, siapa jemput ${memberName} masuk ni? Baru je aman damai tadi.`,
-            `Eh ${memberName}, kau masuk-masuk ni dah mandi ke belum? Dari jauh dah bau hangit.`,
-            `Tengok siapa yang baru masuk, orang paling tak ada life dalam server. Welcome ${memberName}.`,
-            `Masuk pun kau ${memberName}. Ingat eh, jangan sembang merapu malam ni.`,
-            `Haa ${memberName} dah sampai. Korang sorok barang berharga cepat.`,
-            `Well well well, look who decided to show up. Welcome ${memberName}, try not to embarrass yourself today.`,
-          ];
-          const roastText = roasts[Math.floor(Math.random() * roasts.length)];
-          voiceManager.speak(guildId, roastText, { voice: 'ms-MY-Wavenet-B', userName: memberName }).catch((e) => {
-            console.error('Member roast error:', e);
-          });
-        }
+            const roasts = [
+              `Haa masuk pun kau ${memberName}, ingatkan dah kena culik dengan alien.`,
+              `Aduh, siapa jemput ${memberName} masuk ni? Baru je aman damai tadi.`,
+              `Eh ${memberName}, kau masuk-masuk ni dah mandi ke belum? Dari jauh dah bau hangit.`,
+              `Tengok siapa yang baru masuk, orang paling tak ada life dalam server. Welcome ${memberName}.`,
+              `Masuk pun kau ${memberName}. Ingat eh, jangan sembang merapu malam ni.`,
+              `Haa ${memberName} dah sampai. Korang sorok barang berharga cepat.`,
+              `Well well well, look who decided to show up. Welcome ${memberName}, try not to embarrass yourself today.`,
+            ];
+            const roastText = roasts[Math.floor(Math.random() * roasts.length)];
+            voiceManager.speak(guildId, roastText, { voice: 'id-ID-Chirp3-HD-Puck', userName: memberName }).catch((e) => {
+              console.error('Member roast error:', e);
+            });
+          }
       }
     }
   }

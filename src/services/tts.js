@@ -42,23 +42,34 @@ function textToSSML(text) {
   return `<speak>${ssml}</speak>`;
 }
 
-// Supported high-fidelity voices: Google Cloud Studio, Casual & WaveNet (with Edge TTS fallbacks)
+// Supported high-fidelity voices: Google Cloud Chirp 3 HD Generative Models, Studio & WaveNet
 const PERSONA_VOICES = {
-  // Malay personas
-  yasmin: 'ms-MY-Wavenet-A', // Malay (Female WaveNet HD)
-  osman: 'ms-MY-Wavenet-B',  // Malay (Male WaveNet HD)
-  // English personas
-  casual: 'en-US-Casual-K',  // English (Male Conversational Casual HD)
-  guy: 'en-US-Studio-Q',     // English (Male Google Studio HD)
-  jenny: 'en-US-Studio-O',   // English (Female Google Studio HD)
+  // Chirp 3 HD Foundation Models (Google DeepMind Generative Voice)
+  puck: 'en-US-Chirp3-HD-Puck',              // Upbeat & Expressive (Chirp 3 HD)
+  zuben: 'en-US-Chirp3-HD-Zubenelgenubi',    // Chill & Casual Urban Male (Chirp 3 HD)
+  fenrir: 'en-US-Chirp3-HD-Fenrir',          // Energetic Male (Chirp 3 HD)
+  despina: 'en-US-Chirp3-HD-Despina',        // Smooth Modern Female (Chirp 3 HD)
+  aoede: 'en-US-Chirp3-HD-Aoede',            // Breezy Female (Chirp 3 HD)
+
+  // Regional Personas (Malay/Regional Chirp 3 HD)
+  puck_my: 'id-ID-Chirp3-HD-Puck',           // Regional Upbeat Male (Chirp 3 HD)
+  zuben_my: 'id-ID-Chirp3-HD-Zubenelgenubi', // Regional Chill Urban Male (Chirp 3 HD)
+  aoede_my: 'id-ID-Chirp3-HD-Aoede',         // Regional Breezy Female (Chirp 3 HD)
+
+  // Legacy personas (WaveNet & Studio)
+  casual: 'en-US-Casual-K',                  // Conversational Casual Male
+  guy: 'en-US-Studio-Q',                     // Studio Male
+  jenny: 'en-US-Studio-O',                   // Studio Female
+  osman: 'ms-MY-Wavenet-B',                  // Malay Male WaveNet
+  yasmin: 'ms-MY-Wavenet-A',                 // Malay Female WaveNet
 };
 
 // Default persona per language:
-// Malay -> ms-MY-Wavenet-B (Male WaveNet HD)
-// English -> en-US-Casual-K (Male Conversational Casual HD)
+// English -> en-US-Chirp3-HD-Puck (Chirp 3 HD Generative Foundation)
+// Malay   -> id-ID-Chirp3-HD-Puck (Chirp 3 HD Generative Foundation)
 const DEFAULT_VOICES = {
-  ms: 'ms-MY-Wavenet-B',
-  en: 'en-US-Casual-K',
+  ms: 'id-ID-Chirp3-HD-Puck',
+  en: 'en-US-Chirp3-HD-Puck',
 };
 
 // Common Malay keywords to assist with language detection
@@ -67,7 +78,12 @@ const MALAY_REGEX =
 
 class TTSService {
   constructor() {
-    this.defaultVoice = process.env.TTS_VOICE || DEFAULT_VOICES.en;
+    const envVoice = process.env.TTS_VOICE;
+    if (!envVoice || envVoice.includes('JennyNeural') || envVoice.includes('GuyNeural')) {
+      this.defaultVoice = DEFAULT_VOICES.en;
+    } else {
+      this.defaultVoice = envVoice;
+    }
     this.gcpClient = null;
     this._initGCP();
   }
@@ -177,13 +193,35 @@ class TTSService {
 
     const lowerVoice = (voiceName || '').toLowerCase();
 
-    // Map persona / Edge voice names if passed
+    // Map persona / voice names if passed
     let gcpVoice = voiceName;
-    if (lowerVoice.includes('casual')) gcpVoice = 'en-US-Casual-K';
-    else if (lowerVoice.includes('yasmin') || lowerVoice.includes('wavenet-a')) gcpVoice = 'ms-MY-Wavenet-A';
-    else if (lowerVoice.includes('osman') || lowerVoice.includes('wavenet-b')) gcpVoice = 'ms-MY-Wavenet-B';
-    else if (lowerVoice.includes('guy') || lowerVoice.includes('studio-q')) gcpVoice = 'en-US-Studio-Q';
-    else if (lowerVoice.includes('jenny') || lowerVoice.includes('studio-o')) gcpVoice = 'en-US-Studio-O';
+    if (PERSONA_VOICES[lowerVoice]) {
+      gcpVoice = PERSONA_VOICES[lowerVoice];
+    } else if (lowerVoice.includes('puck_my') || (lowerVoice.includes('puck') && lowerVoice.includes('id'))) {
+      gcpVoice = 'id-ID-Chirp3-HD-Puck';
+    } else if (lowerVoice.includes('zuben_my') || (lowerVoice.includes('zuben') && (lowerVoice.includes('id') || lowerVoice.includes('my')))) {
+      gcpVoice = 'id-ID-Chirp3-HD-Zubenelgenubi';
+    } else if (lowerVoice.includes('puck')) {
+      gcpVoice = 'en-US-Chirp3-HD-Puck';
+    } else if (lowerVoice.includes('zuben') || lowerVoice.includes('zubenelgenubi')) {
+      gcpVoice = 'en-US-Chirp3-HD-Zubenelgenubi';
+    } else if (lowerVoice.includes('fenrir')) {
+      gcpVoice = 'en-US-Chirp3-HD-Fenrir';
+    } else if (lowerVoice.includes('despina')) {
+      gcpVoice = 'en-US-Chirp3-HD-Despina';
+    } else if (lowerVoice.includes('aoede')) {
+      gcpVoice = 'en-US-Chirp3-HD-Aoede';
+    } else if (lowerVoice.includes('casual')) {
+      gcpVoice = 'en-US-Casual-K';
+    } else if (lowerVoice.includes('yasmin') || lowerVoice.includes('wavenet-a')) {
+      gcpVoice = 'ms-MY-Wavenet-A';
+    } else if (lowerVoice.includes('osman') || lowerVoice.includes('wavenet-b')) {
+      gcpVoice = 'ms-MY-Wavenet-B';
+    } else if (lowerVoice.includes('guy') || lowerVoice.includes('studio-q')) {
+      gcpVoice = 'en-US-Studio-Q';
+    } else if (lowerVoice.includes('jenny') || lowerVoice.includes('studio-o')) {
+      gcpVoice = 'en-US-Studio-O';
+    }
 
     // Resolve languageCode from voice name
     let languageCode = 'en-US';
@@ -193,6 +231,7 @@ class TTSService {
       languageCode = 'id-ID';
     }
 
+    const speakingRate = gcpVoice.includes('Chirp') ? 0.98 : 0.96;
     const ssml = textToSSML(text);
 
     let res;
@@ -209,7 +248,7 @@ class TTSService {
           audioConfig: {
             audioEncoding: 'MP3',
             sampleRateHertz: 48000,
-            speakingRate: 0.96, // Realistic human conversational pace with natural cadence
+            speakingRate,
             pitch: 0.0,
           },
         },
@@ -228,7 +267,7 @@ class TTSService {
           audioConfig: {
             audioEncoding: 'MP3',
             sampleRateHertz: 48000,
-            speakingRate: 0.96,
+            speakingRate,
             pitch: 0.0,
           },
         },
@@ -250,10 +289,15 @@ class TTSService {
   async _synthesizeEdgeTTS(text, voiceName) {
     const lowerVoice = (voiceName || '').toLowerCase();
     let edgeVoice = 'en-US-GuyNeural';
-    if (lowerVoice.includes('casual') || lowerVoice.includes('studio-q') || lowerVoice.includes('guy')) edgeVoice = 'en-US-GuyNeural';
-    else if (lowerVoice.includes('studio-o') || lowerVoice.includes('jenny')) edgeVoice = 'en-US-JennyNeural';
-    else if (lowerVoice.includes('wavenet-b') || lowerVoice.includes('osman')) edgeVoice = 'ms-MY-OsmanNeural';
-    else if (lowerVoice.includes('wavenet-a') || lowerVoice.includes('yasmin')) edgeVoice = 'ms-MY-YasminNeural';
+    if (lowerVoice.includes('despina') || lowerVoice.includes('aoede') || lowerVoice.includes('jenny') || lowerVoice.includes('studio-o')) {
+      edgeVoice = 'en-US-JennyNeural';
+    } else if (lowerVoice.includes('wavenet-a') || lowerVoice.includes('yasmin')) {
+      edgeVoice = 'ms-MY-YasminNeural';
+    } else if (lowerVoice.includes('wavenet-b') || lowerVoice.includes('osman')) {
+      edgeVoice = 'ms-MY-OsmanNeural';
+    } else {
+      edgeVoice = 'en-US-GuyNeural';
+    }
 
     // Strip any SSML/XML tags for Edge TTS
     const plainText = text.replace(/<[^>]+>/g, '').trim();

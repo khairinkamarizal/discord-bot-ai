@@ -16,12 +16,13 @@ module.exports = {
         .setDescription('Optional: Choose speaker persona')
         .setRequired(false)
         .addChoices(
-          { name: 'Auto (Malay: WaveNet / English: Conversational)', value: 'auto' },
-          { name: 'English (Male - Casual Conversational)', value: 'casual' },
-          { name: 'English (Male - Studio-Q)', value: 'guy' },
-          { name: 'English (Female - Studio-O)', value: 'jenny' },
-          { name: 'Malay (Male - WaveNet)', value: 'osman' },
-          { name: 'Malay (Female - WaveNet)', value: 'yasmin' }
+          { name: 'Auto (Chirp 3 HD Generative Foundation)', value: 'auto' },
+          { name: 'Puck (Chirp 3 HD - Upbeat & Expressive)', value: 'puck' },
+          { name: 'Zuben (Chirp 3 HD - Chill Casual Urban)', value: 'zuben' },
+          { name: 'Fenrir (Chirp 3 HD - Energetic)', value: 'fenrir' },
+          { name: 'Despina (Chirp 3 HD - Smooth Female)', value: 'despina' },
+          { name: 'Malay / Regional (Chirp 3 HD)', value: 'puck_my' },
+          { name: 'Malay (Legacy WaveNet-B)', value: 'osman' }
         )
     ),
 
@@ -94,7 +95,12 @@ module.exports = {
 
       // 4. Friendly label for the voice
       let voiceLabel = selectedVoice;
-      if (selectedVoice.includes('Casual') || selectedVoice.includes('Casual-K')) voiceLabel = 'English (Casual-K - Conversational HD)';
+      if (selectedVoice.includes('Chirp3-HD-Puck')) voiceLabel = 'Chirp 3 HD (Puck - Upbeat Generative)';
+      else if (selectedVoice.includes('Chirp3-HD-Zubenelgenubi')) voiceLabel = 'Chirp 3 HD (Zuben - Chill Casual)';
+      else if (selectedVoice.includes('Chirp3-HD-Fenrir')) voiceLabel = 'Chirp 3 HD (Fenrir - Energetic)';
+      else if (selectedVoice.includes('Chirp3-HD-Despina')) voiceLabel = 'Chirp 3 HD (Despina - Smooth Female)';
+      else if (selectedVoice.includes('Chirp3-HD-Aoede')) voiceLabel = 'Chirp 3 HD (Aoede - Breezy Female)';
+      else if (selectedVoice.includes('Casual') || selectedVoice.includes('Casual-K')) voiceLabel = 'English (Casual-K - Conversational HD)';
       else if (selectedVoice.includes('Studio-Q') || selectedVoice.includes('Guy')) voiceLabel = 'English (Studio-Q - Studio HD)';
       else if (selectedVoice.includes('Studio-O') || selectedVoice.includes('Jenny')) voiceLabel = 'English (Studio-O - Studio HD)';
       else if (selectedVoice.includes('Wavenet-B') || selectedVoice.includes('Osman')) voiceLabel = 'Malay (WaveNet-B - Male HD)';
