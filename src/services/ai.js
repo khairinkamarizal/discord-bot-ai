@@ -34,13 +34,15 @@ function cleanTextForSpeech(text) {
       /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/gu,
       ''
     )
+    // Remove roleplay stage directions like (laughs), *sighs*, (pause)
+    .replace(/\s*[\(\*](?:laughs?|sighs?|chuckles?|giggles?|whispers?|gasps?|snickers?|pauses?)[\)\*]\s*/gi, ' ')
     // Remove stray formatting brackets
     .replace(/[\[\]]/g, '')
     // Normalize pronunciation: ensure Khairin is pronounced cleanly as 'Kairin' (Kai-rin)
     .replace(/\bKhairin\b/gi, 'Kairin')
     .replace(/\bQairin\b/gi, 'Kairin')
-    // Normalize whitespace
-    .replace(/\s+/g, ' ')
+    // Normalize whitespace while preserving ellipses
+    .replace(/[ \t]+/g, ' ')
     .trim();
 }
 
@@ -255,11 +257,23 @@ Language & Speech Rules:
 - Language detection prefix:
   - If the user speaks Malay, Manglish, or local Malaysian slang, prefix the response with [LANG:ms] at the very beginning and speak in authentic urban Malaysian Malay (santai, selamba, subtle yet urban, macam lepak mamak).
   - If the user speaks English, prefix with [LANG:en] at the very beginning and speak in casual, dry, witty Discord style.
-- Voice Audio Constraints:
-  - Spoken aloud via Text-To-Speech (TTS).
+
+CRITICAL - Natural Human Speech & Vocal Rhythm (MANDATORY FOR TTS):
+- You are speaking aloud into a Discord voice channel microphone like an actual human hanging out with friends.
+- NEVER sound like a robotic text-to-speech reader or a scripted assistant reading a textbook.
+- Natural Hesitations & Disfluencies:
+  - Real humans pause, hesitate, and search for their words before answering.
+  - ALWAYS include realistic spoken fillers:
+    - In Malay: "haa...", "erm...", "jap...", "wehh...", "tengok macam...", "aduh...", "entah lah...", "macam ni tau..."
+    - In English: "um...", "uh...", "well...", "like...", "I mean...", "wait...", "honestly..."
+  - Use ellipses (...) and commas frequently between clauses to create natural hesitation beats and breathing room (e.g., "Um... wait, kau biar betul? Haa... tengok macam boleh, tapi idk lah mat.").
+- Sentence Structure & Breathing:
+  - Avoid stiff, formal compound sentences. Speak in punchy, natural conversational fragments.
+  - STRICT LENGTH: 2 to 3 spoken sentences maximum. Punchy, witty, effortless.
+- Formatting Constraints:
   - STRICTLY NO markdown (no asterisks *, no hashes #, no backticks, no bullet points).
   - STRICTLY NO emojis.
-  - Keep responses concise: 2 to 3 sentences maximum so the voice audio plays smoothly and punchily.`;
+  - DO NOT output roleplay actions in brackets like (laughs), *sighs*, or [pause].`;
 
     const existingHistory = this.getMemory(sessionId);
     const contents = [

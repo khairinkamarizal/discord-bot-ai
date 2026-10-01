@@ -17,7 +17,8 @@ module.exports = {
         .setDescription('Optional: Choose speaker persona')
         .setRequired(false)
         .addChoices(
-          { name: 'Auto (Malay: WaveNet / English: Studio)', value: 'auto' },
+          { name: 'Auto (Malay: WaveNet / English: Conversational)', value: 'auto' },
+          { name: 'English (Male - Casual Conversational)', value: 'casual' },
           { name: 'English (Male - Studio-Q)', value: 'guy' },
           { name: 'English (Female - Studio-O)', value: 'jenny' },
           { name: 'Malay (Male - WaveNet)', value: 'osman' },
@@ -94,7 +95,8 @@ module.exports = {
 
       // Friendly label for the voice
       let voiceLabel = selectedVoice;
-      if (selectedVoice.includes('Studio-Q') || selectedVoice.includes('Guy')) voiceLabel = 'English (Studio-Q - Studio HD)';
+      if (selectedVoice.includes('Casual') || selectedVoice.includes('Casual-K')) voiceLabel = 'English (Casual-K - Conversational HD)';
+      else if (selectedVoice.includes('Studio-Q') || selectedVoice.includes('Guy')) voiceLabel = 'English (Studio-Q - Studio HD)';
       else if (selectedVoice.includes('Studio-O') || selectedVoice.includes('Jenny')) voiceLabel = 'English (Studio-O - Studio HD)';
       else if (selectedVoice.includes('Wavenet-B') || selectedVoice.includes('Osman')) voiceLabel = 'Malay (WaveNet-B - Male HD)';
       else if (selectedVoice.includes('Wavenet-A') || selectedVoice.includes('Yasmin')) voiceLabel = 'Malay (WaveNet-A - Female HD)';
