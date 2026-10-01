@@ -65,17 +65,30 @@ class VoiceManager {
     this.musicService = musicService;
   }
 
-  saveChannel(guildId, channelId) {
+  saveGuildState(guildId) {
     try {
       let data = {};
       if (fs.existsSync(STATE_FILE)) {
-        data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        try {
+          data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        } catch (_) {}
       }
-      data[guildId] = channelId;
-      fs.writeFileSync(STATE_FILE, JSON.stringify(data, null, 2));
+      const state = this.guilds.get(guildId);
+      if (state) {
+        data[guildId] = {
+          channelId: state.channelId,
+          musicVolume: state.musicVolume ?? 0.20,
+          voiceVolume: state.voiceVolume ?? 0.50,
+        };
+        fs.writeFileSync(STATE_FILE, JSON.stringify(data, null, 2));
+      }
     } catch (e) {
-      console.warn('Failed to save voice channel state:', e.message);
+      console.warn('Failed to save guild voice state:', e.message);
     }
+  }
+
+  saveChannel(guildId, channelId) {
+    this.saveGuildState(guildId);
   }
 
   clearSavedChannel(guildId) {
@@ -93,7 +106,16 @@ class VoiceManager {
   getSavedChannels() {
     try {
       if (fs.existsSync(STATE_FILE)) {
-        return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        const raw = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        const result = {};
+        for (const [gId, val] of Object.entries(raw)) {
+          if (typeof val === 'string') {
+            result[gId] = val;
+          } else if (val && typeof val === 'object' && val.channelId) {
+            result[gId] = val.channelId;
+          }
+        }
+        return result;
       }
     } catch (e) {}
     return {};
@@ -142,6 +164,19 @@ class VoiceManager {
     });
     connection.subscribe(player);
 
+    let savedMusicVol = 0.20;
+    let savedVoiceVol = 0.50;
+    try {
+      if (fs.existsSync(STATE_FILE)) {
+        const raw = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        const saved = raw[guildId];
+        if (saved && typeof saved === 'object') {
+          if (typeof saved.musicVolume === 'number') savedMusicVol = saved.musicVolume;
+          if (typeof saved.voiceVolume === 'number') savedVoiceVol = saved.voiceVolume;
+        }
+      }
+    } catch (_) {}
+
     guildState = {
       connection,
       player,
@@ -154,9 +189,9 @@ class VoiceManager {
       activeMixer: null,
       musicFFmpeg: null,
       currentResource: null,
-      musicVolume: 0.20, // 20% comfortable default music volume
-      voiceVolume: 0.50, // 50% comfortable default voice/speech volume
-      volume: 0.20, // legacy fallback
+      musicVolume: savedMusicVol, // Persisted user setting or 20% default
+      voiceVolume: savedVoiceVol, // Persisted user setting or 50% default
+      volume: savedMusicVol, // legacy fallback
       isPlaying: false,
       channelId: channel.id,
       channelName: channel.name,
@@ -165,7 +200,7 @@ class VoiceManager {
     };
 
     this.guilds.set(guildId, guildState);
-    this.saveChannel(guildId, channel.id);
+    this.saveGuildState(guildId);
 
     // Audio player state tracking and logging
     player.on('stateChange', (oldState, newState) => {
@@ -471,6 +506,37 @@ class VoiceManager {
   }
 
   /**
+   * Plays an AI generated vocal/music performance track (e.g. from Google Lyria 3).
+   * Binds to music volume so it respects /volume (music or all) and real-time level adjustments.
+   * @param {string} guildId
+   * @param {string} audioFilePath
+   * @param {object} [meta={}]
+   * @returns {Promise<{ isSpeakingNow: boolean, queuePosition: number }>}
+   */
+  async playPerformance(guildId, audioFilePath, meta = {}) {
+    const guildState = this.guilds.get(guildId);
+    if (!guildState || !fs.existsSync(audioFilePath)) return;
+
+    const item = {
+      type: 'performance',
+      filePath: audioFilePath,
+      ...meta,
+    };
+
+    guildState.speechQueue.push(item);
+    const queuePosition = guildState.speechQueue.length;
+
+    if (!guildState.isSpeaking) {
+      this._processSpeechQueue(guildId).catch((err) => {
+        console.error(`Error processing performance in guild ${guildId}:`, err);
+      });
+      return { isSpeakingNow: true, queuePosition: 0 };
+    } else {
+      return { isSpeakingNow: false, queuePosition };
+    }
+  }
+
+  /**
    * Speaks text over a background sound/music file simultaneously (mixed together with no delay).
    * @param {string} guildId
    * @param {string} bgmFilePath
@@ -581,7 +647,10 @@ class VoiceManager {
         mixer.notifyTTSEnd();
       });
       ttsStream.pipe(speechFFmpeg);
-    } else if (item.type === 'sound') {
+    } else if (item.type === 'performance' || item.type === 'sound') {
+      if (item.type === 'performance') {
+        mixer.setTTSVolume(guildState.musicVolume ?? 0.20);
+      }
       speechFFmpeg = new prism.FFmpeg({
         args: [
           '-nostdin',
@@ -688,7 +757,12 @@ class VoiceManager {
         inlineVolume: true,
       });
       resource.volume?.setVolume(0.5);
-    } else if (item.type === 'sound') {
+    } else if (item.type === 'performance' || item.type === 'sound') {
+      const isPerf = item.type === 'performance';
+      const targetVolume = isPerf
+        ? (guildState.musicVolume ?? 0.20)
+        : (guildState.voiceVolume ?? 0.50);
+
       const ffmpeg = new prism.FFmpeg({
         args: [
           '-nostdin',
@@ -705,7 +779,7 @@ class VoiceManager {
         inputType: StreamType.Raw,
         inlineVolume: true,
       });
-      resource.volume?.setVolume(guildState.voiceVolume ?? 0.5);
+      resource.volume?.setVolume(targetVolume);
     } else {
       const stream = await this.ttsService.getAudioStream(item.text, item.voice, { mode: item.mode });
       resource = createAudioResource(stream, {
@@ -964,21 +1038,32 @@ class VoiceManager {
       guildState.volume = clamped;
       if (guildState.activeMixer) {
         guildState.activeMixer.setBaseVolume(clamped);
+        if (guildState.currentSpeech?.type === 'performance') {
+          guildState.activeMixer.setTTSVolume(clamped);
+        }
       }
-      if (guildState.currentResource?.volume && guildState.isPlaying) {
-        guildState.currentResource.volume.setVolume(clamped);
+      if (guildState.currentResource?.volume) {
+        if (guildState.isPlaying || guildState.currentSpeech?.type === 'performance') {
+          guildState.currentResource.volume.setVolume(clamped);
+        }
       }
     }
 
     if (channel === 'voice' || channel === 'all') {
       guildState.voiceVolume = clamped;
-      if (guildState.activeMixer) {
+      if (guildState.activeMixer && guildState.currentSpeech?.type !== 'performance') {
         guildState.activeMixer.setTTSVolume(clamped);
       }
-      if (guildState.currentResource?.volume && guildState.isSpeaking) {
+      if (
+        guildState.currentResource?.volume &&
+        guildState.isSpeaking &&
+        guildState.currentSpeech?.type !== 'performance'
+      ) {
         guildState.currentResource.volume.setVolume(clamped);
       }
     }
+
+    this.saveGuildState(guildId);
 
     return {
       music: Math.round((guildState.musicVolume ?? 0.20) * 100),

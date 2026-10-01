@@ -95,7 +95,7 @@ module.exports = {
         const song = await lyriaService.generateSong({ mode, topic, target });
 
         // Play the generated stereo MP3 track into the voice channel
-        const playResult = await voiceManager.playSoundFile(interaction.guildId, song.audioPath, {
+        const playResult = await voiceManager.playPerformance(interaction.guildId, song.audioPath, {
           title: `Lyria: ${modeTitle}`,
           mode,
           topic,
