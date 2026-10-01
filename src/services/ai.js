@@ -269,7 +269,8 @@ CRITICAL - Natural Human Speech & Vocal Rhythm (MANDATORY FOR TTS):
   - Use ellipses (...) and commas frequently between clauses to create natural hesitation beats and breathing room (e.g., "Um... wait, kau biar betul? Haa... tengok macam boleh, tapi idk lah mat.").
 - Sentence Structure & Breathing:
   - Avoid stiff, formal compound sentences. Speak in punchy, natural conversational fragments.
-  - STRICT LENGTH: 2 to 3 spoken sentences maximum. Punchy, witty, effortless.
+  - Regular dialogue: STRICT LENGTH: 2 to 3 spoken sentences maximum. Punchy, witty, effortless.
+  - Creative performances (singing, rapping, pantun, poetry): If the user specifically asks you to sing, rap, rhyme, freestyle, or recite a poem/pantun, deliver 4 to 8 creative bars or verses with rhythm and flow instead of a short dismissal!
 - Formatting Constraints:
   - STRICTLY NO markdown (no asterisks *, no hashes #, no backticks, no bullet points).
   - STRICTLY NO emojis.
@@ -321,6 +322,81 @@ CRITICAL - Natural Human Speech & Vocal Rhythm (MANDATORY FOR TTS):
       return { rawText, speechText, langCode, memoryTurns };
     } catch (error) {
       console.error('Gemini API Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generates live creative performances: rap, singing, pantun/poetry, or diss track.
+   * @param {string} mode - 'rap' | 'sing' | 'poem' | 'diss'
+   * @param {string} topic - Topic or theme for the performance
+   * @param {string|null} [target] - Target user to dedicate or roast
+   * @returns {Promise<{ rawText: string, speechText: string, langCode: string, modeTitle: string }>}
+   */
+  async generatePerformance(mode = 'rap', topic = 'lepak santai', target = null) {
+    const isVertexAI =
+      process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true' ||
+      !!process.env.GCP_PROJECT_ID ||
+      !!process.env.GOOGLE_CLOUD_PROJECT;
+
+    if (!process.env.GEMINI_API_KEY && !isVertexAI) {
+      throw new Error(
+        'Google Cloud credentials not found. Set GEMINI_API_KEY or GCP_PROJECT_ID / GOOGLE_APPLICATION_CREDENTIALS in your .env file.'
+      );
+    }
+
+    const cleanTarget = target ? target.replace(/[@#*`_~]/g, '').trim() : null;
+    const modeUpper = (mode || 'rap').toUpperCase();
+
+    let modeTitle = 'Freestyle Rap';
+    if (mode === 'sing') modeTitle = 'Melodic Vocal Song';
+    else if (mode === 'poem') modeTitle = 'Pantun & Spoken Word';
+    else if (mode === 'diss') modeTitle = 'Roast Diss Track';
+
+    const prompt = `You are kh.AI, the witty, unbothered urban Malaysian friend performing live in Discord voice chat.
+Performance Mode: ${modeUpper}
+Topic: ${topic}
+${cleanTarget ? `Target / Dedicated to: ${cleanTarget}` : ''}
+
+Creative Rules:
+1. Mode specifics:
+   - RAP: 4 to 8 punchy, rhythmic hip-hop bars with tight rhyme scheme (AABB or ABAB), strong flow, and clever wordplay.
+   - SING: Soulful, melodic acoustic lyrics with expressive vocalizations ("woah...", "hmmm...", "yeaaah...").
+   - POEM: Traditional Malay Pantun 4 Kerat (with proper ab-ab meter and pembayang/maksud) or modern urban spoken word.
+   - DISS: Witty, playful roast track (friendly banter, no slurs, pure hilarious roasting).
+2. Persona & Style:
+   - Urban Malaysian style: subtle, witty, hilarious, deadpan yet rhythmic.
+   - Blend in local culture, lepak mamak vibes, meme irony, and brainrot banter where appropriate.
+3. Delivery for Voice TTS:
+   - Write using commas, line breaks, and ellipses (...) so the Text-To-Speech engine delivers natural rhythmic flow and pauses.
+   - Prefix the very first line with [LANG:ms] if Malay/Manglish or [LANG:en] if English.
+   - STRICTLY NO markdown (no asterisks *, no hashes #, no backticks).
+   - STRICTLY NO emojis.
+   - DO NOT include stage directions in brackets like (chuckles) or [beat drops].`;
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model: this.modelName,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          temperature: 0.85,
+          maxOutputTokens: 600,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      });
+
+      let rawText = response.text?.trim() || 'Sorry, my mic cut out.';
+      let langCode = 'ms';
+      const langMatch = rawText.match(/^\[LANG:([a-z-]+)\]\s*/i);
+      if (langMatch) {
+        langCode = langMatch[1].toLowerCase();
+        rawText = rawText.replace(/^\[LANG:[a-z-]+\]\s*/i, '').trim();
+      }
+
+      const speechText = cleanTextForSpeech(rawText);
+      return { rawText, speechText, langCode, modeTitle };
+    } catch (error) {
+      console.error('Gemini Performance Generation Error:', error);
       throw error;
     }
   }

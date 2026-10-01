@@ -155,23 +155,24 @@ class TTSService {
   }
 
   /**
-   * Generates a readable audio stream from text using Google Cloud Studio/WaveNet TTS
+   * Generates a readable audio stream from text using Google Cloud Studio/WaveNet/Chirp TTS
    * with automatic fallback to Microsoft Edge TTS.
    * @param {string} text - Clean text to speak
    * @param {string} [voice] - Voice identifier
+   * @param {{ mode?: string, speakingRate?: number }} [options] - Optional mode or rate tuning
    * @returns {Promise<import('stream').Readable>}
    */
-  async getAudioStream(text, voice = this.defaultVoice) {
+  async getAudioStream(text, voice = this.defaultVoice, options = {}) {
     if (!text || !text.trim()) {
       throw new Error('TTS text cannot be empty');
     }
 
     const selectedVoice = this.resolveVoice(null, text, voice);
 
-    // Try Google Cloud Text-to-Speech first (Casual-K, Studio-Q & WaveNet HD)
+    // Try Google Cloud Text-to-Speech first (Chirp 3 HD, Casual-K, Studio-Q & WaveNet HD)
     if (this.gcpAuth) {
       try {
-        const stream = await this._synthesizeGoogleCloud(text, selectedVoice);
+        const stream = await this._synthesizeGoogleCloud(text, selectedVoice, options);
         return stream;
       } catch (err) {
         console.warn(`[TTS] Google Cloud TTS failed for "${selectedVoice}": ${err.message}. Falling back to Edge TTS...`);
@@ -179,14 +180,14 @@ class TTSService {
     }
 
     // Fallback to Microsoft Edge TTS (high bitrate 96kbps)
-    return this._synthesizeEdgeTTS(text, selectedVoice);
+    return this._synthesizeEdgeTTS(text, selectedVoice, options);
   }
 
   /**
    * Synthesize using Google Cloud Text-to-Speech REST API.
    * @private
    */
-  async _synthesizeGoogleCloud(text, voiceName) {
+  async _synthesizeGoogleCloud(text, voiceName, options = {}) {
     if (!this.gcpClient) {
       this.gcpClient = await this.gcpAuth.getClient();
     }
@@ -231,7 +232,17 @@ class TTSService {
       languageCode = 'id-ID';
     }
 
-    const speakingRate = gcpVoice.includes('Chirp') ? 0.98 : 0.96;
+    let speakingRate = gcpVoice.includes('Chirp') ? 0.98 : 0.96;
+    if (options.speakingRate) {
+      speakingRate = options.speakingRate;
+    } else if (options.mode === 'rap' || options.mode === 'diss') {
+      speakingRate = 1.04;
+    } else if (options.mode === 'sing') {
+      speakingRate = 0.94;
+    } else if (options.mode === 'poem') {
+      speakingRate = 0.96;
+    }
+
     const ssml = textToSSML(text);
 
     let res;
@@ -286,7 +297,7 @@ class TTSService {
    * Fallback synthesis using Microsoft Edge TTS with 96kbps audio.
    * @private
    */
-  async _synthesizeEdgeTTS(text, voiceName) {
+  async _synthesizeEdgeTTS(text, voiceName, options = {}) {
     const lowerVoice = (voiceName || '').toLowerCase();
     let edgeVoice = 'en-US-GuyNeural';
     if (lowerVoice.includes('despina') || lowerVoice.includes('aoede') || lowerVoice.includes('jenny') || lowerVoice.includes('studio-o')) {
@@ -302,9 +313,13 @@ class TTSService {
     // Strip any SSML/XML tags for Edge TTS
     const plainText = text.replace(/<[^>]+>/g, '').trim();
 
+    let rate = '-4%';
+    if (options.mode === 'rap' || options.mode === 'diss') rate = '+2%';
+    else if (options.mode === 'sing') rate = '-6%';
+
     const tts = new MsEdgeTTS();
     await tts.setMetadata(edgeVoice, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
-    const { audioStream } = tts.toStream(plainText, { rate: '-4%' });
+    const { audioStream } = tts.toStream(plainText, { rate });
 
     const cleanup = () => {
       try {

@@ -21,6 +21,7 @@ module.exports = {
           name: 'VOICE & INTELLIGENCE',
           value:
             '`/ask <question> [voice]`\nInquire aloud in the voice channel with natural dialogue.\n\n' +
+            '`/perform <mode> <topic> [target]`\nDeliver live freestyle raps, songs, pantun, or diss tracks.\n\n' +
             '`/say <text> [voice]`\nRender custom text into speech in your voice channel.\n\n' +
             '`/imagine <prompt> [reference]`\nSynthesize visuals from text or transform reference images.\n\n' +
             '`/roastmode <on|off>`\nToggle ambient voice greetings upon channel entry.\n\n' +

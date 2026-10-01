@@ -594,7 +594,7 @@ class VoiceManager {
         ],
       });
     } else {
-      const ttsStream = await this.ttsService.getAudioStream(item.text, item.voice);
+      const ttsStream = await this.ttsService.getAudioStream(item.text, item.voice, { mode: item.mode });
       speechFFmpeg = new prism.FFmpeg({
         args: [
           '-nostdin',
@@ -707,7 +707,7 @@ class VoiceManager {
       });
       resource.volume?.setVolume(guildState.voiceVolume ?? 0.5);
     } else {
-      const stream = await this.ttsService.getAudioStream(item.text, item.voice);
+      const stream = await this.ttsService.getAudioStream(item.text, item.voice, { mode: item.mode });
       resource = createAudioResource(stream, {
         inputType: StreamType.Arbitrary,
         inlineVolume: true,
