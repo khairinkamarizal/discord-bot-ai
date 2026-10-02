@@ -24,7 +24,6 @@ module.exports = {
             '`/live [on|off|status]`\nToggle real-time bidirectional voice conversation with Gemini Live (sub-second streaming).\n\n' +
             '`/perform <topic> [genre] [mode] [mood] [vocal] [target]`\nCompose studio songs across any genre (Rock Kapak, UK Drill, City Pop, R&B) with Lyria 3.\n\n' +
             '`/say <text> [voice]`\nRender custom text into speech in your voice channel.\n\n' +
-            '`/imagine <prompt> [reference]`\nSynthesize visuals from text or transform reference images.\n\n' +
             '`/roastmode <on|off>`\nToggle ambient voice greetings upon channel entry.\n\n' +
             '`/reset`\nClear conversational context for the current session.\n\n' +
             '`@kh.AI <message>`\nEngage directly in any text channel.',

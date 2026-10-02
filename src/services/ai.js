@@ -99,14 +99,6 @@ class AIService {
       }
 
       this.ai = new GoogleGenAI(options);
-
-      // Dedicated client targeting global endpoint for Gemini 3 Pro Image generation
-      this.aiGlobal = new GoogleGenAI({
-        vertexai: true,
-        project,
-        location: 'global',
-        ...(process.env.GEMINI_API_KEY ? { apiKey: process.env.GEMINI_API_KEY } : {}),
-      });
     } else {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
@@ -399,96 +391,6 @@ Creative Rules:
       console.error('Gemini Performance Generation Error:', error);
       throw error;
     }
-  }
-
-  /**
-   * Generates or transforms an image using the latest Gemini Image models (Gemini 3 Pro Image)
-   * @param {string} prompt - The prompt describing the desired image
-   * @param {{ buffer: Buffer, mimeType: string }|null} [referenceImage] - Optional reference image
-   * @returns {Promise<{ buffer: Buffer, mimeType: string, text: string|null, modelUsed: string }>}
-   */
-  async generateImage(prompt, referenceImage = null) {
-    const isVertexAI =
-      process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true' ||
-      !!process.env.GCP_PROJECT_ID ||
-      !!process.env.GOOGLE_CLOUD_PROJECT;
-
-    if (!process.env.GEMINI_API_KEY && !isVertexAI) {
-      throw new Error(
-        'Google Cloud credentials not found. Set GEMINI_API_KEY or GCP_PROJECT_ID / GOOGLE_APPLICATION_CREDENTIALS in your .env file.'
-      );
-    }
-
-    let contents;
-    if (referenceImage && referenceImage.buffer) {
-      const base64Data = referenceImage.buffer.toString('base64');
-      contents = [
-        {
-          role: 'user',
-          parts: [
-            {
-              inlineData: {
-                mimeType: referenceImage.mimeType || 'image/png',
-                data: base64Data,
-              },
-            },
-            { text: prompt },
-          ],
-        },
-      ];
-    } else {
-      contents = prompt;
-    }
-
-    const safetySettings = [
-      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
-      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
-      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
-      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
-    ];
-
-    // Priority list: Gemini 3 Pro Image (latest flagship), Gemini 3.1 Flash Image (next-gen fast), Gemini 2.5 Flash Image (stable fallback)
-    const candidateConfigs = [
-      { client: this.aiGlobal || this.ai, model: 'gemini-3-pro-image', label: 'Gemini 3 Pro Image' },
-      { client: this.aiGlobal || this.ai, model: 'gemini-3.1-flash-image', label: 'Gemini 3.1 Flash Image' },
-      { client: this.ai, model: 'gemini-2.5-flash-image', label: 'Gemini 2.5 Flash Image' },
-    ];
-
-    let lastError = null;
-
-    for (const { client, model, label } of candidateConfigs) {
-      try {
-        const response = await client.models.generateContent({
-          model,
-          contents,
-          config: {
-            safetySettings,
-          },
-        });
-
-        const parts = response.candidates?.[0]?.content?.parts || [];
-        const imgPart = parts.find((p) => p.inlineData && p.inlineData.data);
-        const textPart = parts.find((p) => p.text);
-
-        if (!imgPart) {
-          const finishReason = response.candidates?.[0]?.finishReason;
-          const textMessage = textPart?.text || 'No image could be generated.';
-          throw new Error(`Failed to generate image. ${finishReason ? `Reason: ${finishReason}. ` : ''}${textMessage}`);
-        }
-
-        const buffer = Buffer.from(imgPart.inlineData.data, 'base64');
-        const mimeType = imgPart.inlineData.mimeType || 'image/png';
-        const text = textPart?.text?.trim() || null;
-
-        return { buffer, mimeType, text, modelUsed: label };
-      } catch (error) {
-        lastError = error;
-        console.warn(`[ImageGen] Model ${model} failed, trying next candidate:`, error.message?.slice(0, 120));
-      }
-    }
-
-    console.error('Gemini Image Generation Error:', lastError);
-    throw lastError || new Error('Failed to generate image with available models.');
   }
 
   /**
