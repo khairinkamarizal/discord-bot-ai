@@ -24,6 +24,7 @@ const { VoiceManager } = require('./voice/player');
 const { AIService } = require('./services/ai');
 const { MusicService } = require('./services/music');
 const { LyriaService } = require('./services/lyria');
+const { LiveVoiceService } = require('./services/liveVoice');
 
 // Ensure token is provided
 if (!process.env.DISCORD_TOKEN) {
@@ -65,7 +66,9 @@ const voiceManager = new VoiceManager();
 const aiService = new AIService();
 const musicService = new MusicService(client);
 const lyriaService = new LyriaService();
+const liveVoiceService = new LiveVoiceService(voiceManager);
 voiceManager.setMusicService(musicService);
+voiceManager.setLiveVoiceService(liveVoiceService);
 
 // Load commands from commands directory
 const commandsPath = path.join(__dirname, 'commands');
@@ -157,6 +160,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       aiService,
       musicService,
       lyriaService,
+      liveVoiceService,
     });
   } catch (error) {
     console.error(`Error executing /${interaction.commandName}:`, error);

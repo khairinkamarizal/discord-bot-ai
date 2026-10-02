@@ -46,6 +46,11 @@ class VoiceManager {
      */
     this.guilds = new Map();
     this.roastMode = true;
+    this.liveVoiceService = null;
+  }
+
+  setLiveVoiceService(liveVoiceService) {
+    this.liveVoiceService = liveVoiceService;
   }
 
   setRoastMode(enabled) {
@@ -299,6 +304,9 @@ class VoiceManager {
       if (isExplicit) {
         guildState.explicitDisconnect = true;
         this.clearSavedChannel(guildId);
+      }
+      if (this.liveVoiceService) {
+        this.liveVoiceService.stopLive(guildId, 'user');
       }
       guildState.queue = [];
       guildState.speechQueue = [];
