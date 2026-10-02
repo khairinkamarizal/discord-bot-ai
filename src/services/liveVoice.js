@@ -3,6 +3,7 @@ const {
   createAudioResource,
   StreamType,
   EndBehaviorType,
+  AudioPlayerStatus,
 } = require('@discordjs/voice');
 const { EmbedBuilder } = require('discord.js');
 const prism = require('prism-media');
@@ -398,7 +399,9 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
       inactivityTimer: null,
       maxDurationTimer: null,
       receiverSubscriptions: new Map(),
+      activeSpeakers: new Set(),
       speakingListener: null,
+      playerIdleListener: null,
     };
 
     const resetInactivity = () => {
@@ -485,8 +488,11 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
           } catch (_) {}
           activeTurnStream = null;
         }
-        liveState.isBotSpeaking = false;
-        this.setEngineState(liveState, guild, 'LISTENING');
+        // If player already idle (e.g. no audio in turn or playback already ended), reset immediately
+        if (guildState.player?.state?.status === AudioPlayerStatus.Idle) {
+          liveState.isBotSpeaking = false;
+          this.setEngineState(liveState, guild, 'LISTENING');
+        }
       }
     };
 
@@ -541,6 +547,20 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
     liveState.isActive = true;
     this.sessions.set(guildId, liveState);
 
+    // Listen for player returning to Idle when audio broadcast finishes
+    if (guildState?.player) {
+      const playerIdleListener = (oldState, newState) => {
+        if (newState.status === AudioPlayerStatus.Idle) {
+          if (liveState.isBotSpeaking && !activeTurnStream) {
+            liveState.isBotSpeaking = false;
+            this.setEngineState(liveState, guild, 'LISTENING');
+          }
+        }
+      };
+      guildState.player.on('stateChange', playerIdleListener);
+      liveState.playerIdleListener = playerIdleListener;
+    }
+
     // Initial state: LISTENING
     this.setEngineState(liveState, guild, 'LISTENING');
 
@@ -577,8 +597,10 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
         opusStream.pipe(decoder);
         liveState.receiverSubscriptions.set(userId, { opusStream, decoder });
 
+        let isSpeaking = false;
+        let silentFrames = 0;
         let consecutiveVoiceFrames = 0;
-        let hangoverFrames = 0;
+        let turnVoicedFrames = 0;
 
         decoder.on('data', (pcm48k) => {
           if (!liveState.isActive || !liveState.session) return;
@@ -594,29 +616,63 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
 
           if (rms >= voiceThreshold) {
             consecutiveVoiceFrames++;
-            hangoverFrames = 10; // ~200ms hangover to protect low-energy word endings
+            turnVoicedFrames++;
+            silentFrames = 0;
 
-            // Transition state to HEARING
-            if (liveState.engineState !== 'HEARING' && !isBotSpeaking) {
-              this.setEngineState(liveState, guild, 'HEARING', {
-                speaker: speakerName,
-                inputText: '',
-                outputText: '',
-              });
+            if (!isSpeaking) {
+              isSpeaking = true;
+              liveState.activeSpeakers.add(userId);
+
+              // Transition state to HEARING
+              if (liveState.engineState !== 'HEARING' && !isBotSpeaking) {
+                this.setEngineState(liveState, guild, 'HEARING', {
+                  speaker: speakerName,
+                  inputText: '',
+                  outputText: '',
+                });
+              }
             }
-          } else if (hangoverFrames > 0) {
-            hangoverFrames--;
           } else {
             consecutiveVoiceFrames = 0;
+
+            if (isSpeaking) {
+              silentFrames++;
+
+              // Silence cutoff threshold: 13 frames (~260ms of silence)
+              // Immediately triggers turn completion to Gemini Live API without waiting for 3s VAD timeout!
+              if (silentFrames >= 13) {
+                isSpeaking = false;
+                silentFrames = 0;
+                liveState.activeSpeakers.delete(userId);
+
+                // If genuine speech occurred (>= 4 voiced frames = 80ms) and no other speaker is active
+                if (turnVoicedFrames >= 4 && liveState.activeSpeakers.size === 0) {
+                  try {
+                    liveState.session.sendRealtimeInput({ audioStreamEnd: true });
+                  } catch (sendErr) {
+                    console.error('Live audioStreamEnd error:', sendErr.message);
+                  }
+                  this.setEngineState(liveState, guild, 'PROCESSING');
+                } else if (liveState.activeSpeakers.size === 0 && liveState.engineState === 'HEARING') {
+                  this.setEngineState(liveState, guild, 'LISTENING');
+                }
+
+                turnVoicedFrames = 0;
+                return;
+              }
+
+              // Send up to 5 silent frames (~100ms hangover) so low-energy word endings aren't chopped
+              if (silentFrames > 5) {
+                return;
+              }
+            } else {
+              // Below voice threshold and not speaking: drop packet
+              return;
+            }
           }
 
-          // If bot is speaking, ignore packets unless user intentionally shouts/talks over it
+          // If bot is speaking, ignore packets unless user intentionally shouts/talks over it (barge-in)
           if (isBotSpeaking && consecutiveVoiceFrames < 3) {
-            return;
-          }
-
-          // If bot is listening, drop packets if neither voice energy nor hangover is active
-          if (!isBotSpeaking && consecutiveVoiceFrames === 0 && hangoverFrames === 0) {
             return;
           }
 
@@ -637,6 +693,7 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
 
         const cleanupStream = () => {
           liveState.receiverSubscriptions.delete(userId);
+          liveState.activeSpeakers.delete(userId);
           try {
             decoder.destroy();
           } catch (_) {}
@@ -644,9 +701,16 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
             opusStream.destroy();
           } catch (_) {}
 
-          // When user finishes speaking, transition to PROCESSING (Gemini thinking)
-          if (liveState.engineState === 'HEARING') {
+          // If user was actively speaking when stream closed, ensure audioStreamEnd is sent
+          if (isSpeaking && turnVoicedFrames >= 4 && liveState.activeSpeakers.size === 0) {
+            isSpeaking = false;
+            turnVoicedFrames = 0;
+            try {
+              liveState.session?.sendRealtimeInput({ audioStreamEnd: true });
+            } catch (_) {}
             this.setEngineState(liveState, guild, 'PROCESSING');
+          } else if (liveState.activeSpeakers.size === 0 && liveState.engineState === 'HEARING') {
+            this.setEngineState(liveState, guild, 'LISTENING');
           }
         };
 
@@ -689,13 +753,20 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
     if (liveState.maxDurationTimer) clearTimeout(liveState.maxDurationTimer);
     if (liveState.pendingHudTimer) clearTimeout(liveState.pendingHudTimer);
 
-    // Unhook speaking listener
+    // Unhook speaking and player listeners
     const guildState = this.voiceManager.guilds.get(guildId);
     if (guildState?.connection?.receiver && liveState.speakingListener) {
       try {
         guildState.connection.receiver.speaking.off('start', liveState.speakingListener);
       } catch (_) {}
     }
+    if (guildState?.player && liveState.playerIdleListener) {
+      try {
+        guildState.player.off('stateChange', liveState.playerIdleListener);
+      } catch (_) {}
+      liveState.playerIdleListener = null;
+    }
+    liveState.activeSpeakers?.clear();
 
     // Clean up active receiver streams
     for (const [userId, sub] of liveState.receiverSubscriptions.entries()) {
