@@ -558,7 +558,9 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
       const playerIdleListener = (oldState, newState) => {
         if (newState.status === AudioPlayerStatus.Idle) {
           liveState.isBotSpeaking = false;
-          if (liveState.isActive && (liveState.engineState === 'SPEAKING' || liveState.engineState === 'PROCESSING')) {
+          // When player returns to Idle, only reset to LISTENING if engine was SPEAKING.
+          // If state is PROCESSING or HEARING, user input is actively in flight.
+          if (liveState.isActive && liveState.engineState === 'SPEAKING') {
             this.setEngineState(liveState, guild, 'LISTENING');
           }
         }
@@ -605,15 +607,21 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
 
         let isSpeaking = false;
         let turnVoicedFrames = 0;
+        const preRollBuffer = [];
+        const PRE_ROLL_MAX_FRAMES = 12; // ~240ms of pre-roll to preserve opening consonants and syllables
 
         decoder.on('data', (pcm48k) => {
           if (!liveState.isActive || !liveState.session) return;
 
-          // While bot is broadcasting audio, ignore microphone to avoid speaker bleed/echo
-          if (liveState.isBotSpeaking) return;
-
           const rms = calculateRms(pcm48k);
-          const voiceThreshold = 500;
+          // If the bot is actively streaming speech chunks to the player, use a higher threshold (950 RMS)
+          // to suppress speaker bleed while still allowing the user to naturally chime in.
+          // When bot is idle or draining the final buffer tail, standard threshold (450 RMS) captures soft/normal voice.
+          const isActivelyBroadcasting = liveState.isBotSpeaking && activeTurnStream !== null;
+          const voiceThreshold = isActivelyBroadcasting ? 950 : 450;
+
+          const pcm16kMono = downsample48kStereoTo16kMono(pcm48k);
+          if (pcm16kMono.length === 0) return;
 
           if (rms >= voiceThreshold) {
             turnVoicedFrames++;
@@ -629,22 +637,40 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
                   outputText: '',
                 });
               }
+
+              // Flush all pre-roll frames so the beginning of the sentence is never clipped
+              while (preRollBuffer.length > 0) {
+                const preFrame = preRollBuffer.shift();
+                try {
+                  liveState.session.sendRealtimeInput({
+                    audio: {
+                      data: preFrame.toString('base64'),
+                      mimeType: 'audio/pcm;rate=16000',
+                    },
+                  });
+                } catch (sendErr) {
+                  console.error('Live sendRealtimeInput pre-roll error:', sendErr.message);
+                }
+              }
             }
           }
 
           if (isSpeaking) {
-            const pcm16kMono = downsample48kStereoTo16kMono(pcm48k);
-            if (pcm16kMono.length > 0) {
-              try {
-                liveState.session.sendRealtimeInput({
-                  audio: {
-                    data: pcm16kMono.toString('base64'),
-                    mimeType: 'audio/pcm;rate=16000',
-                  },
-                });
-              } catch (sendErr) {
-                console.error('Live sendRealtimeInput error:', sendErr.message);
-              }
+            try {
+              liveState.session.sendRealtimeInput({
+                audio: {
+                  data: pcm16kMono.toString('base64'),
+                  mimeType: 'audio/pcm;rate=16000',
+                },
+              });
+            } catch (sendErr) {
+              console.error('Live sendRealtimeInput error:', sendErr.message);
+            }
+          } else {
+            // Buffer leading audio frames prior to speech onset
+            preRollBuffer.push(pcm16kMono);
+            if (preRollBuffer.length > PRE_ROLL_MAX_FRAMES) {
+              preRollBuffer.shift();
             }
           }
         });
@@ -652,6 +678,7 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
         const cleanupStream = () => {
           liveState.receiverSubscriptions.delete(userId);
           liveState.activeSpeakers.delete(userId);
+          preRollBuffer.length = 0;
           try {
             decoder.destroy();
           } catch (_) {}
