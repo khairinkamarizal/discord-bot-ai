@@ -151,6 +151,9 @@ class LiveVoiceService {
             },
             inputAudioTranscription: {},
             outputAudioTranscription: {},
+            realtimeInputConfig: {
+              activityHandling: 'NO_INTERRUPTION',
+            },
           },
           callbacks: {
             onopen: () => {
@@ -430,20 +433,8 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
         this.scheduleHudUpdate(liveState);
       }
 
-      // Handle user interruption
+      // Natural human speech: ignore server interruption events so the bot finishes speaking
       if (content.interrupted) {
-        if (activeTurnStream) {
-          console.log(`⚡ [Live Voice] User interrupted bot in guild ${guildId}`);
-          try {
-            activeTurnStream.destroy();
-          } catch (_) {}
-          activeTurnStream = null;
-          try {
-            guildState.player.stop(true);
-          } catch (_) {}
-        }
-        liveState.isBotSpeaking = false;
-        this.setEngineState(liveState, guild, 'LISTENING');
         return;
       }
 
@@ -488,10 +479,14 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
           } catch (_) {}
           activeTurnStream = null;
         }
-        // If player already idle (e.g. no audio in turn or playback already ended), reset immediately
+        // If player already idle (e.g. no audio in turn or playback already ended), reset state after room reverb delay
         if (guildState.player?.state?.status === AudioPlayerStatus.Idle) {
-          liveState.isBotSpeaking = false;
-          this.setEngineState(liveState, guild, 'LISTENING');
+          setTimeout(() => {
+            if (guildState?.player?.state?.status === AudioPlayerStatus.Idle) {
+              liveState.isBotSpeaking = false;
+              this.setEngineState(liveState, guild, 'LISTENING');
+            }
+          }, 150);
         }
       }
     };
@@ -552,8 +547,12 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
       const playerIdleListener = (oldState, newState) => {
         if (newState.status === AudioPlayerStatus.Idle) {
           if (liveState.isBotSpeaking && !activeTurnStream) {
-            liveState.isBotSpeaking = false;
-            this.setEngineState(liveState, guild, 'LISTENING');
+            setTimeout(() => {
+              if (guildState?.player?.state?.status === AudioPlayerStatus.Idle) {
+                liveState.isBotSpeaking = false;
+                this.setEngineState(liveState, guild, 'LISTENING');
+              }
+            }, 150);
           }
         }
       };
@@ -605,14 +604,21 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
         decoder.on('data', (pcm48k) => {
           if (!liveState.isActive || !liveState.session) return;
 
-          const rms = calculateRms(pcm48k);
-          const isBotSpeaking = liveState.isBotSpeaking;
+          // Natural human turn-taking: while the bot is speaking, completely ignore microphone input.
+          // This prevents interruptions from breathing, mic rustle, keyboard sounds, or speaker echo.
+          if (liveState.isBotSpeaking) {
+            if (isSpeaking) {
+              isSpeaking = false;
+              silentFrames = 0;
+              turnVoicedFrames = 0;
+              consecutiveVoiceFrames = 0;
+              liveState.activeSpeakers.delete(userId);
+            }
+            return;
+          }
 
-          // Dual-threshold noise gate:
-          // 1. While bot is speaking: ignore ambient sounds, keyboard clatter, breathing, and speaker bleed.
-          //    Requires deliberate loud voice (RMS >= 2800) for 3 consecutive frames to barge in.
-          // 2. While bot is listening: ignore background room hum, fan noise, and light breathing (RMS < 600).
-          const voiceThreshold = isBotSpeaking ? 2800 : 600;
+          const rms = calculateRms(pcm48k);
+          const voiceThreshold = 600; // Ignore background room hum, fan noise, and light breathing
 
           if (rms >= voiceThreshold) {
             consecutiveVoiceFrames++;
@@ -624,7 +630,7 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
               liveState.activeSpeakers.add(userId);
 
               // Transition state to HEARING
-              if (liveState.engineState !== 'HEARING' && !isBotSpeaking) {
+              if (liveState.engineState !== 'HEARING') {
                 this.setEngineState(liveState, guild, 'HEARING', {
                   speaker: speakerName,
                   inputText: '',
@@ -669,11 +675,6 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
               // Below voice threshold and not speaking: drop packet
               return;
             }
-          }
-
-          // If bot is speaking, ignore packets unless user intentionally shouts/talks over it (barge-in)
-          if (isBotSpeaking && consecutiveVoiceFrames < 3) {
-            return;
           }
 
           const pcm16kMono = downsample48kStereoTo16kMono(pcm48k);
