@@ -277,6 +277,20 @@ class LiveVoiceService {
     if (meta.inputText !== undefined) liveState.lastInputText = meta.inputText;
     if (meta.outputText !== undefined) liveState.currentOutputText = meta.outputText;
 
+    // Safety watchdog: prevent indefinite hang in PROCESSING state
+    if (liveState.processingWatchdog) {
+      clearTimeout(liveState.processingWatchdog);
+      liveState.processingWatchdog = null;
+    }
+    if (newState === 'PROCESSING') {
+      liveState.processingWatchdog = setTimeout(() => {
+        if (liveState.isActive && liveState.engineState === 'PROCESSING') {
+          console.warn(`⚠️ [Live Voice] Processing watchdog timeout (7s) in guild ${guild.id}. Resetting to LISTENING.`);
+          this.setEngineState(liveState, guild, 'LISTENING');
+        }
+      }, 7000);
+    }
+
     // Update bot Discord presence activity in member list
     try {
       const channelName = guild.channels.cache.get(liveState.channelId)?.name || 'voice';
@@ -405,6 +419,7 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
       activeSpeakers: new Set(),
       speakingListener: null,
       playerIdleListener: null,
+      processingWatchdog: null,
     };
 
     const resetInactivity = () => {
@@ -582,8 +597,7 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
       try {
         const opusStream = receiver.subscribe(userId, {
           end: {
-            behavior: EndBehaviorType.AfterSilence,
-            duration: 350,
+            behavior: EndBehaviorType.Manual,
           },
         });
 
@@ -600,6 +614,7 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
         let silentFrames = 0;
         let consecutiveVoiceFrames = 0;
         let turnVoicedFrames = 0;
+        let ambientRms = 350; // Rolling estimate of ambient background noise
 
         decoder.on('data', (pcm48k) => {
           if (!liveState.isActive || !liveState.session) return;
@@ -618,7 +633,14 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
           }
 
           const rms = calculateRms(pcm48k);
-          const voiceThreshold = 600; // Ignore background room hum, fan noise, and light breathing
+
+          // Dynamically adapt to background room noise during non-speech
+          if (!isSpeaking && rms < 900) {
+            ambientRms = ambientRms * 0.95 + rms * 0.05;
+          }
+
+          // Voice threshold adapts to room noise floor (fan, room hum, breathing)
+          const voiceThreshold = Math.max(700, ambientRms * 2.2);
 
           if (rms >= voiceThreshold) {
             consecutiveVoiceFrames++;
@@ -644,9 +666,9 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
             if (isSpeaking) {
               silentFrames++;
 
-              // Silence cutoff threshold: 13 frames (~260ms of silence)
-              // Immediately triggers turn completion to Gemini Live API without waiting for 3s VAD timeout!
-              if (silentFrames >= 13) {
+              // Silence threshold: 28 frames (~560ms of continuous silence)
+              // Gives speaker natural room to pause between words and take breaths without cutoff
+              if (silentFrames >= 28) {
                 isSpeaking = false;
                 silentFrames = 0;
                 liveState.activeSpeakers.delete(userId);
@@ -655,8 +677,9 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
                 if (turnVoicedFrames >= 4 && liveState.activeSpeakers.size === 0) {
                   try {
                     liveState.session.sendRealtimeInput({ audioStreamEnd: true });
+                    liveState.session.sendClientContent({ turnComplete: true });
                   } catch (sendErr) {
-                    console.error('Live audioStreamEnd error:', sendErr.message);
+                    console.error('Live turnComplete error:', sendErr.message);
                   }
                   this.setEngineState(liveState, guild, 'PROCESSING');
                 } else if (liveState.activeSpeakers.size === 0 && liveState.engineState === 'HEARING') {
@@ -667,8 +690,8 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
                 return;
               }
 
-              // Send up to 5 silent frames (~100ms hangover) so low-energy word endings aren't chopped
-              if (silentFrames > 5) {
+              // Send up to 6 silent frames (~120ms hangover) so low-energy word endings aren't chopped
+              if (silentFrames > 6) {
                 return;
               }
             } else {
@@ -702,12 +725,13 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
             opusStream.destroy();
           } catch (_) {}
 
-          // If user was actively speaking when stream closed, ensure audioStreamEnd is sent
+          // If user was actively speaking when stream closed, ensure turn completion is sent
           if (isSpeaking && turnVoicedFrames >= 4 && liveState.activeSpeakers.size === 0) {
             isSpeaking = false;
             turnVoicedFrames = 0;
             try {
               liveState.session?.sendRealtimeInput({ audioStreamEnd: true });
+              liveState.session?.sendClientContent({ turnComplete: true });
             } catch (_) {}
             this.setEngineState(liveState, guild, 'PROCESSING');
           } else if (liveState.activeSpeakers.size === 0 && liveState.engineState === 'HEARING') {
@@ -753,6 +777,7 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
     if (liveState.inactivityTimer) clearTimeout(liveState.inactivityTimer);
     if (liveState.maxDurationTimer) clearTimeout(liveState.maxDurationTimer);
     if (liveState.pendingHudTimer) clearTimeout(liveState.pendingHudTimer);
+    if (liveState.processingWatchdog) clearTimeout(liveState.processingWatchdog);
 
     // Unhook speaking and player listeners
     const guildState = this.voiceManager.guilds.get(guildId);
