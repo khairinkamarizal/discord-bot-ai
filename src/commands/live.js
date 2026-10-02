@@ -40,11 +40,13 @@ module.exports = {
     }
 
     try {
+      const reply = await interaction.fetchReply().catch(() => null);
       const result = await liveVoiceService.toggleLive(
         interaction.guild,
         memberVoiceChannel,
         interaction.channel,
-        action
+        action,
+        reply
       );
 
       const embed = new EmbedBuilder()
@@ -54,16 +56,8 @@ module.exports = {
         .setTimestamp();
 
       if (result.action === 'started') {
-        embed
-          .setTitle('GEMINI LIVE ACTIVE')
-          .setDescription(
-            'Real-time bidirectional audio stream engaged in your voice channel.\n\n' +
-            '• Latency: Sub-second (~500ms bidirectional stream)\n' +
-            `• Model: ${result.model || 'gemini-live-2.5-flash-native-audio'}\n` +
-            '• Auto-Standby: 2 minutes inactivity timeout\n' +
-            '• Interruption: Speak at any moment to cut in\n\n' +
-            'Speak into your microphone naturally to converse with kh.AI.'
-          );
+        const hudEmbed = liveVoiceService.renderHudEmbed(result.liveState);
+        return interaction.editReply({ embeds: [hudEmbed] });
       } else if (result.action === 'stopped') {
         embed
           .setTitle('GEMINI LIVE DEACTIVATED')

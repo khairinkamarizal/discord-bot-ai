@@ -4,6 +4,7 @@ const {
   StreamType,
   EndBehaviorType,
 } = require('@discordjs/voice');
+const { EmbedBuilder } = require('discord.js');
 const prism = require('prism-media');
 const { PassThrough } = require('stream');
 
@@ -126,7 +127,7 @@ class LiveVoiceService {
 
   /**
    * Connects safely to a Live model candidate with strict timeout and close detection.
-   * Prevents indefinite hanging when a model is not available.
+   * Enables input and output transcriptions for real-time subtitle feed.
    * @private
    */
   async _connectModelCandidate(ai, modelName, systemInstruction, callbacks) {
@@ -147,6 +148,8 @@ class LiveVoiceService {
             systemInstruction: {
               parts: [{ text: systemInstruction }],
             },
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
           },
           callbacks: {
             onopen: () => {
@@ -192,6 +195,115 @@ class LiveVoiceService {
   }
 
   /**
+   * Renders the real-time HUD embed for an active Live session.
+   * @param {object} liveState 
+   */
+  renderHudEmbed(liveState) {
+    const embed = new EmbedBuilder()
+      .setColor(0x111111)
+      .setAuthor({ name: 'kh.AI Live Engine' })
+      .setTitle('GEMINI LIVE ACTIVE')
+      .setFooter({ text: 'kh.ai audio engine' })
+      .setTimestamp();
+
+    let stateBadge = 'LISTENING (Waiting for voice)';
+    if (liveState.engineState === 'HEARING') {
+      stateBadge = `HEARING (${liveState.currentSpeaker || 'User'} is speaking...)`;
+    } else if (liveState.engineState === 'PROCESSING') {
+      stateBadge = 'PROCESSING (Gemini is thinking...)';
+    } else if (liveState.engineState === 'SPEAKING') {
+      stateBadge = 'SPEAKING (Broadcasting voice response)';
+    }
+
+    let description =
+      `Channel: <#${liveState.channelId}>\n` +
+      `Engine State: **[${stateBadge}]**\n` +
+      `Model: \`${liveState.model || 'gemini-live-2.5-flash-native-audio'}\`\n\n`;
+
+    if (liveState.lastInputText) {
+      description += `**Input:** ${liveState.lastInputText}\n`;
+    }
+    if (liveState.currentOutputText) {
+      description += `**Speech:** "${liveState.currentOutputText}"\n`;
+    }
+
+    description +=
+      '\n• Speak into your microphone naturally\n' +
+      '• Auto-standby after 2 minutes of silence\n' +
+      '• Use `/live off` to deactivate';
+
+    embed.setDescription(description);
+    return embed;
+  }
+
+  /**
+   * Throttled updater for the HUD embed (maximum once per 1.2s to prevent rate limits).
+   * @param {object} liveState 
+   */
+  scheduleHudUpdate(liveState) {
+    if (!liveState.hudMessage) return;
+    if (liveState.pendingHudTimer) return; // already queued
+
+    const now = Date.now();
+    const elapsed = now - (liveState.lastHudUpdate || 0);
+    const delay = Math.max(0, 1200 - elapsed);
+
+    liveState.pendingHudTimer = setTimeout(async () => {
+      liveState.pendingHudTimer = null;
+      liveState.lastHudUpdate = Date.now();
+      try {
+        const embed = this.renderHudEmbed(liveState);
+        await liveState.hudMessage.edit({ embeds: [embed] }).catch(() => {});
+      } catch (_) {}
+    }, delay);
+  }
+
+  /**
+   * Transitions engine state (LISTENING, HEARING, PROCESSING, SPEAKING) and updates presence/HUD.
+   * @param {object} liveState 
+   * @param {import('discord.js').Guild} guild 
+   * @param {'LISTENING'|'HEARING'|'PROCESSING'|'SPEAKING'|'STANDBY'} newState 
+   * @param {object} [meta={}] 
+   */
+  setEngineState(liveState, guild, newState, meta = {}) {
+    if (!liveState.isActive && newState !== 'STANDBY') return;
+    liveState.engineState = newState;
+
+    if (meta.speaker) liveState.currentSpeaker = meta.speaker;
+    if (meta.inputText !== undefined) liveState.lastInputText = meta.inputText;
+    if (meta.outputText !== undefined) liveState.currentOutputText = meta.outputText;
+
+    // Update bot Discord presence activity in member list
+    try {
+      const channelName = guild.channels.cache.get(liveState.channelId)?.name || 'voice';
+      let activityName = `Listening in #${channelName}`;
+
+      if (newState === 'HEARING') {
+        activityName = `Hearing ${liveState.currentSpeaker || 'voice'}...`;
+      } else if (newState === 'PROCESSING') {
+        activityName = 'Thinking...';
+      } else if (newState === 'SPEAKING') {
+        activityName = `Speaking in #${channelName}`;
+      } else if (newState === 'LISTENING') {
+        activityName = `Listening in #${channelName}`;
+      } else if (newState === 'STANDBY') {
+        activityName = null;
+      }
+
+      if (activityName) {
+        guild.client.user?.setActivity({
+          name: activityName,
+          type: 2, // Listening
+        });
+      } else {
+        guild.client.user?.setActivity();
+      }
+    } catch (_) {}
+
+    this.scheduleHudUpdate(liveState);
+  }
+
+  /**
    * Checks if live mode is currently active in a guild.
    * @param {string} guildId 
    * @returns {boolean}
@@ -215,6 +327,8 @@ class LiveVoiceService {
     return {
       isActive: true,
       channelId: session.channelId,
+      engineState: session.engineState || 'LISTENING',
+      currentSpeaker: session.currentSpeaker || null,
       uptimeSec,
       idleSec,
       model: session.model || 'gemini-live-2.5-flash-native-audio',
@@ -226,8 +340,9 @@ class LiveVoiceService {
    * @param {import('discord.js').Guild} guild 
    * @param {import('discord.js').VoiceChannel} voiceChannel 
    * @param {import('discord.js').TextChannel} [textChannel] 
+   * @param {import('discord.js').Message} [hudMessage]
    */
-  async startLive(guild, voiceChannel, textChannel = null) {
+  async startLive(guild, voiceChannel, textChannel = null, hudMessage = null) {
     const guildId = guild.id;
 
     if (this.isLive(guildId)) {
@@ -267,9 +382,16 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
       guildId,
       channelId: voiceChannel.id,
       textChannelId: textChannel?.id || null,
+      hudMessage: hudMessage || null,
       isActive: false,
       session: null,
       model: null,
+      engineState: 'LISTENING',
+      currentSpeaker: null,
+      lastInputText: '',
+      currentOutputText: '',
+      lastHudUpdate: 0,
+      pendingHudTimer: null,
       isBotSpeaking: false,
       startedAt: Date.now(),
       lastActiveAt: Date.now(),
@@ -293,6 +415,18 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
       const content = response?.serverContent;
       if (!content) return;
 
+      // Real-time input transcription
+      if (content.inputTranscription?.text) {
+        liveState.lastInputText = (liveState.lastInputText || '') + content.inputTranscription.text;
+        this.scheduleHudUpdate(liveState);
+      }
+
+      // Real-time output transcription
+      if (content.outputTranscription?.text) {
+        liveState.currentOutputText = (liveState.currentOutputText || '') + content.outputTranscription.text;
+        this.scheduleHudUpdate(liveState);
+      }
+
       // Handle user interruption
       if (content.interrupted) {
         if (activeTurnStream) {
@@ -306,6 +440,7 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
           } catch (_) {}
         }
         liveState.isBotSpeaking = false;
+        this.setEngineState(liveState, guild, 'LISTENING');
         return;
       }
 
@@ -328,6 +463,9 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
                 resource.volume.setVolume(guildState.voiceVolume ?? 0.50);
               }
               guildState.player.play(resource);
+
+              // Update HUD state to SPEAKING
+              this.setEngineState(liveState, guild, 'SPEAKING');
             }
 
             try {
@@ -348,6 +486,7 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
           activeTurnStream = null;
         }
         liveState.isBotSpeaking = false;
+        this.setEngineState(liveState, guild, 'LISTENING');
       }
     };
 
@@ -402,6 +541,9 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
     liveState.isActive = true;
     this.sessions.set(guildId, liveState);
 
+    // Initial state: LISTENING
+    this.setEngineState(liveState, guild, 'LISTENING');
+
     // 4. Hook Discord Voice Receiver for real-time microphone input
     const receiver = connection.receiver;
     const botUserId = guild.client.user.id;
@@ -414,6 +556,9 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
 
       // Avoid duplicate subscriptions for the same user
       if (liveState.receiverSubscriptions.has(userId)) return;
+
+      const member = guild.members.cache.get(userId);
+      const speakerName = member?.displayName || 'User';
 
       try {
         const opusStream = receiver.subscribe(userId, {
@@ -450,6 +595,15 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
           if (rms >= voiceThreshold) {
             consecutiveVoiceFrames++;
             hangoverFrames = 10; // ~200ms hangover to protect low-energy word endings
+
+            // Transition state to HEARING
+            if (liveState.engineState !== 'HEARING' && !isBotSpeaking) {
+              this.setEngineState(liveState, guild, 'HEARING', {
+                speaker: speakerName,
+                inputText: '',
+                outputText: '',
+              });
+            }
           } else if (hangoverFrames > 0) {
             hangoverFrames--;
           } else {
@@ -489,6 +643,11 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
           try {
             opusStream.destroy();
           } catch (_) {}
+
+          // When user finishes speaking, transition to PROCESSING (Gemini thinking)
+          if (liveState.engineState === 'HEARING') {
+            this.setEngineState(liveState, guild, 'PROCESSING');
+          }
         };
 
         opusStream.on('end', cleanupStream);
@@ -528,6 +687,7 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
     // Clear timers
     if (liveState.inactivityTimer) clearTimeout(liveState.inactivityTimer);
     if (liveState.maxDurationTimer) clearTimeout(liveState.maxDurationTimer);
+    if (liveState.pendingHudTimer) clearTimeout(liveState.pendingHudTimer);
 
     // Unhook speaking listener
     const guildState = this.voiceManager.guilds.get(guildId);
@@ -563,30 +723,31 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
       } catch (_) {}
     }
 
-    this.sessions.delete(guildId);
+    // Reset bot presence activity
+    try {
+      guildState?.channel?.guild?.client?.user?.setActivity();
+    } catch (_) {}
 
-    // Post notification if auto-closed
-    if (reason !== 'user' && notifyChannel) {
-      const msg =
-        reason === 'inactivity'
-          ? 'Live voice session entered standby mode after 2 minutes of inactivity to conserve API resources. Use `/live on` to resume.'
-          : 'Live voice session reached the 15-minute maximum session safety limit. Use `/live on` to start a new session.';
+    // Update HUD embed one last time to show deactivated state
+    if (liveState.hudMessage) {
+      const deactEmbed = new EmbedBuilder()
+        .setColor(0x111111)
+        .setAuthor({ name: 'kh.AI Live Engine' })
+        .setTitle('GEMINI LIVE DEACTIVATED')
+        .setDescription(
+          reason === 'inactivity'
+            ? 'Live session entered standby mode after 2 minutes of inactivity to conserve API resources.\n\nUse `/live on` to resume real-time voice streaming.'
+            : reason === 'max_duration'
+            ? 'Live session reached the 15-minute maximum session safety limit.\n\nUse `/live on` to resume.'
+            : 'Live voice session concluded. Voice channel returned to standard idle standby.\n\nUse `/live on` to reactivate.'
+        )
+        .setFooter({ text: 'kh.ai audio engine' })
+        .setTimestamp();
 
-      notifyChannel
-        .send({
-          embeds: [
-            {
-              color: 0x111111,
-              author: { name: 'kh.AI Live Voice' },
-              title: 'LIVE SESSION STANDBY',
-              description: msg,
-              footer: { text: 'kh.ai audio engine' },
-              timestamp: new Date().toISOString(),
-            },
-          ],
-        })
-        .catch(() => {});
+      liveState.hudMessage.edit({ embeds: [deactEmbed] }).catch(() => {});
     }
+
+    this.sessions.delete(guildId);
 
     return true;
   }
@@ -597,8 +758,9 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
    * @param {import('discord.js').VoiceChannel} voiceChannel 
    * @param {import('discord.js').TextChannel} textChannel 
    * @param {'on'|'off'|'status'|'toggle'} [action='toggle']
+   * @param {import('discord.js').Message} [hudMessage]
    */
-  async toggleLive(guild, voiceChannel, textChannel, action = 'toggle') {
+  async toggleLive(guild, voiceChannel, textChannel, action = 'toggle', hudMessage = null) {
     const guildId = guild.id;
     const isCurrentlyActive = this.isLive(guildId);
 
@@ -625,11 +787,12 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
           model: this.getSessionInfo(guildId).model,
         };
       }
-      const liveState = await this.startLive(guild, voiceChannel, textChannel);
+      const liveState = await this.startLive(guild, voiceChannel, textChannel, hudMessage);
       return {
         action: 'started',
         isActive: true,
         model: liveState.model,
+        liveState,
       };
     } else {
       if (!isCurrentlyActive) {
