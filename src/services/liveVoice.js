@@ -6,8 +6,6 @@ const {
 } = require('@discordjs/voice');
 const prism = require('prism-media');
 const { PassThrough } = require('stream');
-const path = require('path');
-const fs = require('fs');
 
 /**
  * Downsamples 48kHz 16-bit stereo PCM to 16kHz 16-bit mono PCM.
@@ -70,12 +68,19 @@ class LiveVoiceService {
 
   /**
    * Initializes Google GenAI client for Live API.
-   * Prefers GEMINI_API_KEY (AI Studio) to avoid GCP Vertex billing issues,
-   * otherwise falls back to Vertex AI credentials.
+   * Resolves models based on platform (Google AI Studio vs Vertex AI).
    */
   getAiClient() {
     if (process.env.GEMINI_API_KEY) {
-      return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      return {
+        ai: new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }),
+        isVertex: false,
+        models: [
+          'gemini-3.1-flash-live-preview',
+          'gemini-live-2.5-flash-native-audio',
+          'gemini-2.0-flash-exp',
+        ],
+      };
     }
 
     const isVertexAI =
@@ -86,12 +91,87 @@ class LiveVoiceService {
     if (isVertexAI) {
       const project = process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
       const location = process.env.GCP_LOCATION || 'us-central1';
-      return new GoogleGenAI({ vertexai: true, project, location });
+      return {
+        ai: new GoogleGenAI({ vertexai: true, project, location }),
+        isVertex: true,
+        // On Vertex AI, gemini-live-2.5-flash-native-audio is the GA Live model
+        models: [
+          'gemini-live-2.5-flash-native-audio',
+          'gemini-3.1-flash-live-preview',
+        ],
+      };
     }
 
     throw new Error(
-      'No Gemini credentials configured. Add GEMINI_API_KEY to your .env file.'
+      'No Gemini credentials configured. Add GEMINI_API_KEY or GCP_PROJECT_ID to your .env file.'
     );
+  }
+
+  /**
+   * Connects safely to a Live model candidate with strict timeout and close detection.
+   * Prevents indefinite hanging when a model is not available.
+   * @private
+   */
+  async _connectModelCandidate(ai, modelName, systemInstruction, callbacks) {
+    return new Promise((resolve, reject) => {
+      let isSettled = false;
+      const timeout = setTimeout(() => {
+        if (!isSettled) {
+          isSettled = true;
+          reject(new Error(`Handshake timed out after 6s for model ${modelName}`));
+        }
+      }, 6000);
+
+      ai.live
+        .connect({
+          model: modelName,
+          config: {
+            responseModalities: ['AUDIO'],
+            systemInstruction: {
+              parts: [{ text: systemInstruction }],
+            },
+          },
+          callbacks: {
+            onopen: () => {
+              callbacks.onopen?.();
+            },
+            onmessage: (msg) => {
+              callbacks.onmessage?.(msg);
+            },
+            onerror: (err) => {
+              callbacks.onerror?.(err);
+              if (!isSettled) {
+                isSettled = true;
+                clearTimeout(timeout);
+                reject(err);
+              }
+            },
+            onclose: (closeEv) => {
+              callbacks.onclose?.(closeEv);
+              if (!isSettled) {
+                isSettled = true;
+                clearTimeout(timeout);
+                const reason = closeEv?.reason || `Code ${closeEv?.code || 1000}`;
+                reject(new Error(`WebSocket closed by server during handshake: ${reason}`));
+              }
+            },
+          },
+        })
+        .then((session) => {
+          if (!isSettled) {
+            isSettled = true;
+            clearTimeout(timeout);
+            resolve(session);
+          }
+        })
+        .catch((err) => {
+          if (!isSettled) {
+            isSettled = true;
+            clearTimeout(timeout);
+            reject(err);
+          }
+        });
+    });
   }
 
   /**
@@ -120,7 +200,7 @@ class LiveVoiceService {
       channelId: session.channelId,
       uptimeSec,
       idleSec,
-      model: 'gemini-3.1-flash-live-preview',
+      model: session.model || 'gemini-live-2.5-flash-native-audio',
     };
   }
 
@@ -154,7 +234,7 @@ class LiveVoiceService {
       } catch (_) {}
     }
 
-    const ai = this.getAiClient();
+    const clientConfig = this.getAiClient();
 
     const systemInstruction = `You are kh.AI, a sharp-witted, intelligent, natural, friendly, urban Malaysian AI companion live in a Discord voice channel.
 You speak naturally in Malay and Malaysian English (Manglish/urban style: 'wey', 'korang', 'chill lah').
@@ -172,6 +252,7 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
       textChannelId: textChannel?.id || null,
       isActive: false,
       session: null,
+      model: null,
       startedAt: Date.now(),
       lastActiveAt: Date.now(),
       inactivityTimer: null,
@@ -189,98 +270,114 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
       }, this.INACTIVITY_TIMEOUT_MS);
     };
 
-    // 3. Connect to Gemini Live API
-    let liveSession;
-    try {
-      liveSession = await ai.live.connect({
-        model: 'gemini-3.1-flash-live-preview',
-        config: {
-          responseModalities: ['audio'],
-          systemInstruction: {
-            parts: [{ text: systemInstruction }],
-          },
-        },
-        callbacks: {
-          onopen: () => {
-            console.log(`🎙️ [Live Voice] Gemini Live session connected for guild ${guildId}`);
-          },
-          onmessage: (response) => {
-            resetInactivity();
-            const content = response?.serverContent;
-            if (!content) return;
+    const handleMessage = (response) => {
+      resetInactivity();
+      const content = response?.serverContent;
+      if (!content) return;
 
-            // Handle user interruption
-            if (content.interrupted) {
-              console.log(`⚡ [Live Voice] User interrupted bot in guild ${guildId}`);
-              if (activeTurnStream) {
-                try {
-                  activeTurnStream.destroy();
-                } catch (_) {}
-                activeTurnStream = null;
+      // Handle user interruption
+      if (content.interrupted) {
+        console.log(`⚡ [Live Voice] User interrupted bot in guild ${guildId}`);
+        if (activeTurnStream) {
+          try {
+            activeTurnStream.destroy();
+          } catch (_) {}
+          activeTurnStream = null;
+        }
+        try {
+          guildState.player.stop(true);
+        } catch (_) {}
+        return;
+      }
+
+      // Stream audio output chunks
+      if (content.modelTurn?.parts) {
+        for (const part of content.modelTurn.parts) {
+          if (part.inlineData?.data) {
+            const pcm24kMono = Buffer.from(part.inlineData.data, 'base64');
+            const pcm48kStereo = upsample24kMonoTo48kStereo(pcm24kMono);
+
+            if (!activeTurnStream) {
+              turnCount++;
+              activeTurnStream = new PassThrough();
+              const resource = createAudioResource(activeTurnStream, {
+                inputType: StreamType.Raw,
+                inlineVolume: true,
+              });
+              if (resource.volume) {
+                resource.volume.setVolume(guildState.voiceVolume ?? 0.50);
               }
-              try {
-                guildState.player.stop(true);
-              } catch (_) {}
-              return;
+              guildState.player.play(resource);
             }
 
-            // Stream audio output chunks
-            if (content.modelTurn?.parts) {
-              for (const part of content.modelTurn.parts) {
-                if (part.inlineData?.data) {
-                  const pcm24kMono = Buffer.from(part.inlineData.data, 'base64');
-                  const pcm48kStereo = upsample24kMonoTo48kStereo(pcm24kMono);
-
-                  if (!activeTurnStream) {
-                    turnCount++;
-                    activeTurnStream = new PassThrough();
-                    const resource = createAudioResource(activeTurnStream, {
-                      inputType: StreamType.Raw,
-                      inlineVolume: true,
-                    });
-                    if (resource.volume) {
-                      resource.volume.setVolume(guildState.voiceVolume ?? 0.50);
-                    }
-                    guildState.player.play(resource);
-                  }
-
-                  try {
-                    activeTurnStream.write(pcm48kStereo);
-                  } catch (writeErr) {
-                    console.error('Error writing audio chunk:', writeErr.message);
-                  }
-                }
-              }
+            try {
+              activeTurnStream.write(pcm48kStereo);
+            } catch (writeErr) {
+              console.error('Error writing audio chunk:', writeErr.message);
             }
+          }
+        }
+      }
 
-            // Turn completed
-            if (content.turnComplete) {
-              if (activeTurnStream) {
-                try {
-                  activeTurnStream.end();
-                } catch (_) {}
-                activeTurnStream = null;
-              }
-            }
-          },
-          onerror: (err) => {
-            console.error(`❌ [Live Voice] Gemini Live error in guild ${guildId}:`, err);
-          },
-          onclose: (closeEvent) => {
-            console.log(`🔌 [Live Voice] Gemini Live connection closed for guild ${guildId}`, closeEvent?.reason || '');
-          },
-        },
-      });
-    } catch (err) {
-      console.error('Failed to establish Gemini Live connection:', err);
-      let errorMsg = err.message || 'Unknown connection error';
+      // Turn completed
+      if (content.turnComplete) {
+        if (activeTurnStream) {
+          try {
+            activeTurnStream.end();
+          } catch (_) {}
+          activeTurnStream = null;
+        }
+      }
+    };
+
+    const handleError = (err) => {
+      console.error(`❌ [Live Voice] Gemini Live error in guild ${guildId}:`, err);
+    };
+
+    const handleClose = (closeEvent) => {
+      console.log(`🔌 [Live Voice] Gemini Live connection closed for guild ${guildId}`, closeEvent?.reason || '');
+    };
+
+    // 3. Connect to Gemini Live API with candidate fallback
+    let liveSession = null;
+    let selectedModel = null;
+    let lastError = null;
+
+    for (const model of clientConfig.models) {
+      try {
+        console.log(`🎙️ [Live Voice] Connecting with Live model: ${model}...`);
+        liveSession = await this._connectModelCandidate(
+          clientConfig.ai,
+          model,
+          systemInstruction,
+          {
+            onopen: () => {
+              console.log(`🎙️ [Live Voice] WebSocket connected for model ${model} (guild: ${guildId})`);
+            },
+            onmessage: handleMessage,
+            onerror: handleError,
+            onclose: handleClose,
+          }
+        );
+        selectedModel = model;
+        console.log(`✅ [Live Voice] Live session successfully established with: ${selectedModel}`);
+        break;
+      } catch (err) {
+        console.warn(`⚠️ [Live Voice] Model candidate ${model} failed:`, err.message);
+        lastError = err;
+      }
+    }
+
+    if (!liveSession) {
+      let errorMsg = lastError?.message || 'Failed to establish Gemini Live connection.';
       if (errorMsg.includes('Lightning dunning') || errorMsg.includes('PERMISSION_DENIED')) {
-        errorMsg = 'Vertex AI billing issue detected ("Lightning dunning"). Please configure a free GEMINI_API_KEY from https://aistudio.google.com/ in your .env file or refresh your GCP billing account.';
+        errorMsg = 'Vertex AI billing block detected ("Lightning dunning"). Please configure a free GEMINI_API_KEY from https://aistudio.google.com/ in your .env file.';
       }
       throw new Error(errorMsg);
     }
 
     liveState.session = liveSession;
+    liveState.model = selectedModel;
     liveState.isActive = true;
     this.sessions.set(guildId, liveState);
 
@@ -469,10 +566,18 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
 
     if (shouldEnable) {
       if (isCurrentlyActive) {
-        return { action: 'already_on', isActive: true };
+        return {
+          action: 'already_on',
+          isActive: true,
+          model: this.getSessionInfo(guildId).model,
+        };
       }
-      await this.startLive(guild, voiceChannel, textChannel);
-      return { action: 'started', isActive: true };
+      const liveState = await this.startLive(guild, voiceChannel, textChannel);
+      return {
+        action: 'started',
+        isActive: true,
+        model: liveState.model,
+      };
     } else {
       if (!isCurrentlyActive) {
         return { action: 'already_off', isActive: false };

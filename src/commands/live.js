@@ -59,7 +59,7 @@ module.exports = {
           .setDescription(
             'Real-time bidirectional audio stream engaged in your voice channel.\n\n' +
             '• Latency: Sub-second (~500ms bidirectional stream)\n' +
-            '• Model: gemini-3.1-flash-live-preview\n' +
+            `• Model: ${result.model || 'gemini-live-2.5-flash-native-audio'}\n` +
             '• Auto-Standby: 2 minutes inactivity timeout\n' +
             '• Interruption: Speak at any moment to cut in\n\n' +
             'Speak into your microphone naturally to converse with kh.AI.'
