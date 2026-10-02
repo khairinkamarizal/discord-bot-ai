@@ -53,6 +53,23 @@ function upsample24kMonoTo48kStereo(buffer) {
   return out;
 }
 
+/**
+ * Calculates the Root Mean Square (RMS) energy level of 16-bit PCM audio.
+ * Used for noise gating to filter background room noise, hiss, fan, and breathing.
+ * @param {Buffer} buffer
+ * @returns {number}
+ */
+function calculateRms(buffer) {
+  if (!buffer || buffer.length < 2) return 0;
+  let sum = 0;
+  const numSamples = Math.floor(buffer.length / 2);
+  for (let i = 0; i < buffer.length; i += 2) {
+    const val = buffer.readInt16LE(i);
+    sum += val * val;
+  }
+  return Math.sqrt(sum / numSamples);
+}
+
 class LiveVoiceService {
   constructor(voiceManager) {
     this.voiceManager = voiceManager;
@@ -253,6 +270,7 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
       isActive: false,
       session: null,
       model: null,
+      isBotSpeaking: false,
       startedAt: Date.now(),
       lastActiveAt: Date.now(),
       inactivityTimer: null,
@@ -277,16 +295,17 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
 
       // Handle user interruption
       if (content.interrupted) {
-        console.log(`⚡ [Live Voice] User interrupted bot in guild ${guildId}`);
         if (activeTurnStream) {
+          console.log(`⚡ [Live Voice] User interrupted bot in guild ${guildId}`);
           try {
             activeTurnStream.destroy();
           } catch (_) {}
           activeTurnStream = null;
+          try {
+            guildState.player.stop(true);
+          } catch (_) {}
         }
-        try {
-          guildState.player.stop(true);
-        } catch (_) {}
+        liveState.isBotSpeaking = false;
         return;
       }
 
@@ -299,6 +318,7 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
 
             if (!activeTurnStream) {
               turnCount++;
+              liveState.isBotSpeaking = true;
               activeTurnStream = new PassThrough();
               const resource = createAudioResource(activeTurnStream, {
                 inputType: StreamType.Raw,
@@ -327,6 +347,7 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
           } catch (_) {}
           activeTurnStream = null;
         }
+        liveState.isBotSpeaking = false;
       }
     };
 
@@ -411,8 +432,40 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
         opusStream.pipe(decoder);
         liveState.receiverSubscriptions.set(userId, { opusStream, decoder });
 
+        let consecutiveVoiceFrames = 0;
+        let hangoverFrames = 0;
+
         decoder.on('data', (pcm48k) => {
           if (!liveState.isActive || !liveState.session) return;
+
+          const rms = calculateRms(pcm48k);
+          const isBotSpeaking = liveState.isBotSpeaking;
+
+          // Dual-threshold noise gate:
+          // 1. While bot is speaking: ignore ambient sounds, keyboard clatter, breathing, and speaker bleed.
+          //    Requires deliberate loud voice (RMS >= 2800) for 3 consecutive frames to barge in.
+          // 2. While bot is listening: ignore background room hum, fan noise, and light breathing (RMS < 600).
+          const voiceThreshold = isBotSpeaking ? 2800 : 600;
+
+          if (rms >= voiceThreshold) {
+            consecutiveVoiceFrames++;
+            hangoverFrames = 10; // ~200ms hangover to protect low-energy word endings
+          } else if (hangoverFrames > 0) {
+            hangoverFrames--;
+          } else {
+            consecutiveVoiceFrames = 0;
+          }
+
+          // If bot is speaking, ignore packets unless user intentionally shouts/talks over it
+          if (isBotSpeaking && consecutiveVoiceFrames < 3) {
+            return;
+          }
+
+          // If bot is listening, drop packets if neither voice energy nor hangover is active
+          if (!isBotSpeaking && consecutiveVoiceFrames === 0 && hangoverFrames === 0) {
+            return;
+          }
+
           const pcm16kMono = downsample48kStereoTo16kMono(pcm48k);
           if (pcm16kMono.length > 0) {
             try {
@@ -592,4 +645,5 @@ module.exports = {
   LiveVoiceService,
   downsample48kStereoTo16kMono,
   upsample24kMonoTo48kStereo,
+  calculateRms,
 };
