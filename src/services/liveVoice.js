@@ -494,14 +494,10 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
           } catch (_) {}
           activeTurnStream = null;
         }
-        // If player already idle (e.g. no audio in turn or playback already ended), reset state after room reverb delay
+        // If player already idle (e.g. no audio in turn or playback already ended), reset state immediately
         if (guildState.player?.state?.status === AudioPlayerStatus.Idle) {
-          setTimeout(() => {
-            if (guildState?.player?.state?.status === AudioPlayerStatus.Idle) {
-              liveState.isBotSpeaking = false;
-              this.setEngineState(liveState, guild, 'LISTENING');
-            }
-          }, 150);
+          liveState.isBotSpeaking = false;
+          this.setEngineState(liveState, guild, 'LISTENING');
         }
       }
     };
@@ -668,7 +664,6 @@ Do not read markdown formatting, asterisks, emoji names, or lists aloud. Talk na
             turnVoicedFrames = 0;
             isSpeaking = false;
             try {
-              liveState.session?.sendRealtimeInput({ audioStreamEnd: true });
               liveState.session?.sendClientContent({ turnComplete: true });
             } catch (err) {
               console.error('Live turnComplete error:', err.message);
